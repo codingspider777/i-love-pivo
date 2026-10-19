@@ -1,17 +1,35 @@
-# salamanca
+# Salamanca 📱🗺️
 
-A new Flutter project.
+Мобильное оффлайн-приложение для студентов: умный календарь, задачник и интерактивная 2D-карта кампуса.
 
-## Getting Started
+## 🚀 Основные функции
+- **Календарь и задачи:** создание задач, дедлайны, приоритеты.
+- **Интерактивная карта:** зум, панорамирование, тап по зданиям.
+- **Связка «Задача ↔ Карта»:** привязка задачи к конкретному корпусу и центрирование камеры на нём.
+- **Уведомления:** локальные напоминания о задачах.
+- **Оффлайн-режим:** все данные хранятся локально (SQLite).
 
-This project is a starting point for a Flutter application.
+## 🛠️ Технологический стек
+- **Framework:** Flutter (Dart)
+- **Состояние:** Riverpod
+- **База данных:** Drift (SQLite)
+- **Навигация:** go_router
+- **Карта:** flutter_svg + InteractiveViewer
+- **Уведомления:** flutter_local_notifications
 
-A few resources to get you started if this is your first Flutter project:
+## 📂 Структура проекта
+```text
+lib/
+├── core/       # Общие утилиты, темы, роутинг
+├── data/       # База данных, репозитории, модели
+├── features/   # Модули (календарь, задачи, карта, настройки)
+└── main.dart   # Точка входа
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+## 👥 Команда
+- **Тимлид / Архитектор:** codingspider777 (БД, CI/CD, уведомления)
+- **UI/UX Разработчик:** k44ge (Календарь, редактор задач)
+- **Разработчик карты:** Bugurt17 (SVG, интерактив, связка с задачами)
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## 📌 Правила разработки
+Проект ведется по спринтам. Все изменения в `main` вливаются только через Pull Request (PR). 
+Правила работы с Git описаны в нашей внутренней документации.
