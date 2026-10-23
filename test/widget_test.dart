@@ -28,3 +28,15 @@
 //     expect(find.text('1'), findsOneWidget);
 //   });
 // }
+import 'package:flutter_test/flutter_test.dart';
+import 'package:salamanca/main.dart';
+
+void main() {
+  testWidgets('App should build without crashing', (WidgetTester tester) async {
+    // Запускаем приложение
+    await tester.pumpWidget(const MyApp());
+    
+    // Проверяем, что оно успешно отрисовалось
+    expect(find.byType(MyApp), findsOneWidget);
+  });
+}
