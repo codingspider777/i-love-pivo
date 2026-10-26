@@ -40,6 +40,10 @@ dependencies:
   drift: ^2.35.3
   drift_flutter: ^0.3.1
   path_provider: ^2.1.6
+  table_calendar: ^3.3.0
+  intl: ^0.20.3
+  flutter_localizations:
+    sdk: flutter
 
 dev_dependencies:
   flutter_test:
@@ -64,6 +68,17 @@ flutter:
 
   assets:
     - assets/images/map.svg
+
+  fonts:
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter_18pt-Regular.ttf
+        - asset: assets/fonts/Inter_18pt-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Inter_18pt-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Inter_18pt-Bold.ttf
+          weight: 700
 
   # To add assets to your application, add an assets section, like this:
   # assets:
