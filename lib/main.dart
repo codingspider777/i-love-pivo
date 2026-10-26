@@ -5,9 +5,35 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 import 'package:salamanca/core/router/app_router.dart';
 import 'package:salamanca/core/theme/app_theme.dart';
+import 'data/database.dart';
+import 'data/daos/tasks_dao.dart';
+import 'data/repositories/task_repository.dart';
+
+// 1. Провайдер для базы данных
+final databaseProvider = Provider<AppDatabase>((ref) {
+  return AppDatabase();
+});
+
+// 2. Провайдер для DAO (берет базу из первого провайдера)
+final tasksDaoProvider = Provider<TasksDao>((ref) {
+  final db = ref.watch(databaseProvider);
+  return db.tasksDao;
+});
+
+// 3. Провайдер для Репозитория (берет DAO из второго провайдера)
+final taskRepositoryProvider = Provider<TaskRepository>((ref) {
+  final dao = ref.watch(tasksDaoProvider);
+  return TaskRepository(dao);
+});
 
 void main() {
-  runApp(const MyApp());
+  runApp(
+    // ОБЯЗАТЕЛЬНО: Оборачиваем приложение в ProviderScope, 
+    // иначе Riverpod не будет работать!
+    const ProviderScope(
+      child: MyApp(),
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {
