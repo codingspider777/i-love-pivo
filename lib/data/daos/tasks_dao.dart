@@ -1,5 +1,5 @@
 import 'package:drift/drift.dart';
-import 'package:salamanca/data/database.dart'; // Импорт твоей базы данных
+import '../database.dart'; // Импорт твоей базы данных
 
 // Привязываем DAO к таблице Tasks
 part 'tasks_dao.g.dart';
