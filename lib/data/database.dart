@@ -1,5 +1,6 @@
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
+import 'package:salamanca/data/daos/tasks_dao.dart';
 
 // ВАЖНО: Эта строка связывает ваш код со сгенерированным файлом!
 part 'database.g.dart';
@@ -36,7 +37,8 @@ class Events extends Table {
 }
 
 // 4. Класс самой Базы Данных
-@DriftDatabase(tables: [Tasks, Buildings, Events])
+@DriftDatabase(tables: [Tasks, Buildings, Events],
+daos: [TasksDao],)
 class AppDatabase extends _$AppDatabase {
   // Конструктор, который создает файл базы данных на телефоне
   AppDatabase() : super(driftDatabase(name: 'salamanca_db'));
