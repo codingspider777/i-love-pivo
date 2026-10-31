@@ -27,7 +27,7 @@ final taskRepositoryProvider = Provider<TaskRepository>((ref) {
 
 void main() {
   runApp(
-    // ОБЯЗАТЕЛЬНО: Оборачиваем приложение в ProviderScope
+    // Оборачиваем приложение в ProviderScope
     const ProviderScope(
       child: MyApp(),
     ),
@@ -37,7 +37,8 @@ void main() {
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // Создаем роутер один раз
+  // Создаем роутер один раз. 
+  // Никаких extraRoutes и MapTestScreen тут быть не должно!
   static final GoRouter _router = createAppRouter();
 
   @override
