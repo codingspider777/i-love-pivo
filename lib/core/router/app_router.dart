@@ -1,17 +1,11 @@
+//import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:salamanca/core/utils/date_utils.dart';
 import 'package:salamanca/features/calendar/day_screen.dart';
 import 'package:salamanca/features/calendar/month_screen.dart';
 import 'package:salamanca/features/tasks/task_editor_screen.dart';
 
-/// Маршруты:
-///   /                 — месяц
-///   /day/2026-10-25   — задачи дня
-///   /task/new?date=…  — создание задачи
-///   /task/:id         — редактирование задачи
-///
-/// [extraRoutes] позволяет подключать экраны, которые живут вне этого файла
-/// (например, прототип карты из main.dart).
+// --- САМ РОУТЕР ---
 GoRouter createAppRouter({List<RouteBase> extraRoutes = const []}) {
   return GoRouter(
     initialLocation: '/',

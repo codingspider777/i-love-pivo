@@ -9,6 +9,7 @@ import 'data/database.dart';
 import 'data/daos/tasks_dao.dart';
 import 'data/repositories/task_repository.dart';
 
+
 // 1. Провайдер для базы данных
 final databaseProvider = Provider<AppDatabase>((ref) {
   return AppDatabase();
@@ -28,8 +29,7 @@ final taskRepositoryProvider = Provider<TaskRepository>((ref) {
 
 void main() {
   runApp(
-    // ОБЯЗАТЕЛЬНО: Оборачиваем приложение в ProviderScope, 
-    // иначе Riverpod не будет работать!
+    // Оставляем ОДИН ProviderScope здесь
     const ProviderScope(
       child: MyApp(),
     ),
@@ -39,7 +39,7 @@ void main() {
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // Маршрут '/map-test' ведёт на прототип карты, который остался в этом файле.
+  // Роутер создается здесь
   static final GoRouter _router = createAppRouter(
     extraRoutes: [
       GoRoute(
@@ -51,23 +51,23 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ProviderScope(
-      child: MaterialApp.router(
-        title: 'Salamanca',
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.light,
-        routerConfig: _router,
-        locale: const Locale('ru'),
-        supportedLocales: const [Locale('ru'), Locale('en')],
-        localizationsDelegates: const [
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
-        ],
-      ),
+    // Убрали ProviderScope отсюда! Теперь сразу возвращаем MaterialApp
+    return MaterialApp.router(
+      title: 'Salamanca',
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.light,
+      routerConfig: _router, // <--- ВОТ ЗДЕСЬ ПЕРЕДАЕТСЯ РОУТЕР
+      locale: const Locale('ru'),
+      supportedLocales: const [Locale('ru'), Locale('en')],
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
     );
   }
 }
+
 
 class MapTestScreen extends StatefulWidget {
   const MapTestScreen({super.key});
