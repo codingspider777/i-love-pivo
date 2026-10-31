@@ -3,11 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:salamanca/features/map/models/map_building.dart';
 
-/// Размер SVG-карты (должен совпадать с viewBox в main_map.svg).
+/// Размер SVG-карты (должен совпадать с viewBox в main_map_light/dark.svg).
 const double kMapSize = 1500;
 
 /// ВЫКЛЮЧИЛ ОТЛАДКУ, чтобы красные рамки не мешали смотреть названия.
-/// Если снова понадобится настраивать координаты, просто поменяй на true.
 const bool kShowHitboxes = false;
 
 class MapScreen extends ConsumerStatefulWidget {
@@ -108,6 +107,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
   Widget build(BuildContext context) {
     final buildingsAsync = ref.watch(buildingsProvider);
     final scheme = Theme.of(context).colorScheme;
+    
+    // Определяем, включена ли темная тема
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Карта кампуса')),
@@ -130,10 +132,19 @@ class _MapScreenState extends ConsumerState<MapScreen>
                   height: kMapSize,
                   child: Stack(
                     children: [
-                      SvgPicture.asset(
-                        'assets/images/main_map.svg',
-                        width: kMapSize,
-                        height: kMapSize,
+                      // Цветной контейнер на случай, если SVG прозрачный
+                      ColoredBox(
+                        color: isDarkMode 
+                            ? const Color(0xFF0B132B) // Темный фон
+                            : const Color(0xFFF8FAFC), // Светлый фон
+                        child: SvgPicture.asset(
+                          // Подставляем нужную карту
+                          isDarkMode
+                              ? 'assets/images/main_map_dark.svg'
+                              : 'assets/images/main_map_light.svg',
+                          width: kMapSize,
+                          height: kMapSize,
+                        ),
                       ),
                       // Цикл по зданиям: добавляем и хитбокс, и текст
                       for (final b in buildings) ...[
@@ -166,31 +177,38 @@ class _MapScreenState extends ConsumerState<MapScreen>
                             ),
                           ),
                         ),
-                        // 2. Текст с названием здания
-                        Positioned(
-                          left: b.center.dx - 80, // Центрируем текст (ширина 160)
-                          top: b.center.dy - 10,   // Чуть выше центра здания
-                          width: 160,
-                          // IgnorePointer нужен, чтобы текст не перехватывал клики
-                          child: IgnorePointer(
-                            child: Text(
-                              b.name,
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.black87,
-                                shadows: [
-                                  Shadow(
-                                    color: Colors.white,
-                                    blurRadius: 4,
-                                    offset: Offset(0, 1),
+                        // 2. Текст с названием здания (масштабируется с картой, но в 2 строки)
+                        if (b.width > 30 && b.height > 20) // Скрываем подписи у совсем маленьких зданий
+                          Positioned(
+                            left: b.center.dx, 
+                            top: b.center.dy,  
+                            child: FractionalTranslation(
+                              translation: const Offset(-0.5, -0.5),
+                              child: IgnorePointer(
+                                child: Container(
+                                  constraints: const BoxConstraints(maxWidth: 130), // Ограничиваем ширину для переноса
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: isDarkMode 
+                                        ? Colors.black.withValues(alpha: 0.6) 
+                                        : Colors.white.withValues(alpha: 0.8),
+                                    borderRadius: BorderRadius.circular(4),
                                   ),
-                                ],
+                                  child: Text(
+                                    b.name,
+                                    textAlign: TextAlign.center,
+                                    maxLines: 2, // Разрешаем 2 строки
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: isDarkMode ? Colors.white : Colors.black87,
+                                    ),
+                                  ),
+                                ),
                               ),
                             ),
                           ),
-                        ),
                       ],
                     ],
                   ),
