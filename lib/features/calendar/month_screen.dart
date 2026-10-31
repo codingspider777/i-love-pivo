@@ -38,6 +38,9 @@ class _MonthScreenState extends ConsumerState<MonthScreen> {
             tooltip: 'Карта кампуса',
             icon: const Icon(Icons.map_outlined),
             onPressed: () => context.push('/map'),
+            tooltip: 'Прототип карты',
+            icon: const Icon(Icons.map_outlined),
+            onPressed: () => context.push('/map-test'),
           ),
           IconButton(
             tooltip: 'Сегодня',
