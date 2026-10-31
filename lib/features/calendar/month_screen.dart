@@ -34,10 +34,11 @@ class _MonthScreenState extends ConsumerState<MonthScreen> {
       appBar: AppBar(
         title: const Text('Календарь'),
         actions: [
+          // Исправлено: убраны дубликаты, оставлен правильный переход на /map
           IconButton(
-            tooltip: 'Прототип карты',
+            tooltip: 'Карта кампуса',
             icon: const Icon(Icons.map_outlined),
-            onPressed: () => context.push('/map-test'),
+            onPressed: () => context.push('/map'),
           ),
           IconButton(
             tooltip: 'Сегодня',

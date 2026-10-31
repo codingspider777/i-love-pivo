@@ -1,0 +1,191 @@
+[
+  {
+    "id": "dormitory_6",
+    "name": "Общежитие №6",
+    "description": "",
+    "x": 462,
+    "y": 410,
+    "width": 26,
+    "height": 110
+  },
+  {
+    "id": "dormitory_3",
+    "name": "Общежитие №3",
+    "description": "",
+    "x": 304,
+    "y": 540,
+    "width": 122,
+    "height": 48
+  },
+  {
+    "id": "dormitory_1",
+    "name": "Общежитие №1",
+    "description": "",
+    "x": 114,
+    "y": 398,
+    "width": 92,
+    "height": 138
+  },
+  {
+    "id": "dormitory_2",
+    "name": "Общежитие №2 ОЦ «Пирамида»",
+    "description": "",
+    "x": 115,
+    "y": 566,
+    "width": 91,
+    "height": 138
+  },
+  {
+    "id": "corpus_2",
+    "name": "Корпус №2",
+    "description": "",
+    "x": 150,
+    "y": 1156,
+    "width": 148,
+    "height": 140
+  },
+  {
+    "id": "boiling_point",
+    "name": "Точка кипения УлГТУ",
+    "description": "",
+    "x": 809,
+    "y": 217,
+    "width": 55,
+    "height": 64
+  },
+  {
+    "id": "cafe_green_island",
+    "name": "Кафе «Зелёный остров»",
+    "description": "",
+    "x": 548,
+    "y": 500,
+    "width": 89,
+    "height": 68
+  },
+  {
+    "id": "rtcpim",
+    "name": "РТЦПИМ",
+    "description": "",
+    "x": 111,
+    "y": 744,
+    "width": 33,
+    "height": 72
+  },
+  {
+    "id": "swimming_pool",
+    "name": "Бассейн «Северная волна»",
+    "description": "",
+    "x": 326,
+    "y": 1122,
+    "width": 83,
+    "height": 68
+  },
+  {
+    "id": "new_gym",
+    "name": "«Новый» спортзал",
+    "description": "",
+    "x": 181,
+    "y": 1107,
+    "width": 97,
+    "height": 73
+  },
+  {
+    "id": "corpus_1",
+    "name": "1-й корпус УлГТУ",
+    "description": "ул. Энгельса, 3",
+    "x": 1186,
+    "y": 374,
+    "width": 182,
+    "height": 140
+  },
+  {
+    "id": "iatu",
+    "name": "ИАТУ",
+    "description": "пр-т. Созидателей, 13А",
+    "x": 1229,
+    "y": 140,
+    "width": 97,
+    "height": 130
+  },
+  {
+    "id": "corpus_4",
+    "name": "Корпус №4",
+    "description": "",
+    "x": 1112,
+    "y": 506,
+    "width": 24,
+    "height": 104
+  },
+  {
+    "id": "corpus_5",
+    "name": "Корпус №5",
+    "description": "",
+    "x": 1127,
+    "y": 612,
+    "width": 25,
+    "height": 98
+  },
+  {
+    "id": "corpus_3",
+    "name": "Корпус №3",
+    "description": "",
+    "x": 758,
+    "y": 710,
+    "width": 319,
+    "height": 34
+  },
+  {
+    "id": "old_gym",
+    "name": "«Старый» спортзал",
+    "description": "",
+    "x": 852,
+    "y": 576,
+    "width": 168,
+    "height": 58
+  },
+  {
+    "id": "rm_1-3",
+    "name": "Ауд. 1-3",
+    "description": "",
+    "x": 814,
+    "y": 787,
+    "width": 60,
+    "height": 102
+  },
+  {
+    "id": "rm_4-5",
+    "name": "Ауд. 4-5",
+    "description": "",
+    "x": 812,
+    "y": 937,
+    "width": 53,
+    "height": 59
+  },
+  {
+    "id": "main_building",
+    "name": "Корпус №6",
+    "description": "",
+    "x": 916,
+    "y": 927,
+    "width": 28,
+    "height": 195
+  },
+  {
+    "id": "rcstc",
+    "name": "РЦНТК «Тарелка»",
+    "description": "",
+    "x": 917,
+    "y": 1124,
+    "width": 105,
+    "height": 90
+  },
+  {
+    "id": "library",
+    "name": "Библиотека",
+    "description": "",
+    "x": 822,
+    "y": 1124,
+    "width": 94,
+    "height": 46
+  }
+]

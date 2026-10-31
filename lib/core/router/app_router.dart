@@ -4,6 +4,7 @@ import 'package:salamanca/core/utils/date_utils.dart';
 import 'package:salamanca/features/calendar/day_screen.dart';
 import 'package:salamanca/features/calendar/month_screen.dart';
 import 'package:salamanca/features/tasks/task_editor_screen.dart';
+import 'package:salamanca/features/map/map_screen.dart';
 
 // --- САМ РОУТЕР ---
 GoRouter createAppRouter({List<RouteBase> extraRoutes = const []}) {
@@ -34,6 +35,12 @@ GoRouter createAppRouter({List<RouteBase> extraRoutes = const []}) {
         builder: (context, state) =>
             TaskEditorScreen(taskId: state.pathParameters['id']),
       ),
+      GoRoute(
+        path: '/map',
+        builder: (context, state) => MapScreen(
+          focusBuildingId: state.uri.queryParameters['building'],
+        ),
+      ),  
       ...extraRoutes,
     ],
   );
