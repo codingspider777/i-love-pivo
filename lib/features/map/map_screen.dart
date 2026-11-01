@@ -177,38 +177,39 @@ class _MapScreenState extends ConsumerState<MapScreen>
                             ),
                           ),
                         ),
-                        // 2. Текст с названием здания (масштабируется с картой, но в 2 строки)
-                        if (b.width > 30 && b.height > 20) // Скрываем подписи у совсем маленьких зданий
-                          Positioned(
-                            left: b.center.dx, 
-                            top: b.center.dy,  
-                            child: FractionalTranslation(
-                              translation: const Offset(-0.5, -0.5),
-                              child: IgnorePointer(
-                                child: Container(
-                                  constraints: const BoxConstraints(maxWidth: 130), // Ограничиваем ширину для переноса
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                                  decoration: BoxDecoration(
-                                    color: isDarkMode 
-                                        ? Colors.black.withValues(alpha: 0.6) 
-                                        : Colors.white.withValues(alpha: 0.8),
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: Text(
-                                    b.name,
-                                    textAlign: TextAlign.center,
-                                    maxLines: 2, // Разрешаем 2 строки
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                      color: isDarkMode ? Colors.white : Colors.black87,
-                                    ),
+                        
+                        // 2. Текст с названием здания (УБРАЛИ ОГРАНИЧЕНИЕ)
+                        Positioned(
+                          left: b.center.dx, 
+                          top: b.center.dy,  
+                          child: FractionalTranslation(
+                            translation: const Offset(-0.5, -0.5),
+                            child: IgnorePointer(
+                              child: Container(
+                                constraints: const BoxConstraints(maxWidth: 130),
+                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: isDarkMode 
+                                      ? Colors.black.withValues(alpha: 0.6) 
+                                      : Colors.white.withValues(alpha: 0.8),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  b.name,
+                                  textAlign: TextAlign.center,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    // Динамический размер шрифта: для узких зданий меньше
+                                    fontSize: b.width < 40 ? 9 : 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: isDarkMode ? Colors.white : Colors.black87,
                                   ),
                                 ),
                               ),
                             ),
                           ),
+                        ),
                       ],
                     ],
                   ),
