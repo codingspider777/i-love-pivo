@@ -44,6 +44,9 @@ dependencies:
   intl: ^0.20.3
   flutter_localizations:
     sdk: flutter
+  flutter_local_notifications: ^18.0.1
+  timezone: ^0.10.0
+  flutter_timezone: ^1.0.8 # Для получения текущего часового пояса устройства
 
 dev_dependencies:
   flutter_test:
