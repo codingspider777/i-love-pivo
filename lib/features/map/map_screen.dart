@@ -82,6 +82,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
     _focusBuilding(b);
     showModalBottomSheet<void>(
       context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
       builder: (context) => _BuildingSheet(building: b),
     ).whenComplete(() {
       if (mounted) setState(() => _selectedId = null);
@@ -103,12 +106,43 @@ class _MapScreenState extends ConsumerState<MapScreen>
     });
   }
 
+  // Хелпер для иконок маркеров
+  IconData _getIconForCategory(String category) {
+    switch (category) {
+      case 'dormitory':
+        return Icons.bed;
+      case 'sport':
+        return Icons.sports_soccer;
+      case 'food':
+        return Icons.restaurant;
+      case 'admin':
+        return Icons.admin_panel_settings;
+      default:
+        return Icons.school; // academic
+    }
+  }
+
+  // Хелпер для цветов маркеров
+  Color _getColorForCategory(String category) {
+    switch (category) {
+      case 'dormitory':
+        return Colors.orange;
+      case 'sport':
+        return Colors.green;
+      case 'food':
+        return Colors.redAccent;
+      case 'admin':
+        return Colors.purple;
+      default:
+        return Colors.blue; // academic
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final buildingsAsync = ref.watch(buildingsProvider);
     final scheme = Theme.of(context).colorScheme;
-    
-    // Определяем, включена ли темная тема
+
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
@@ -132,13 +166,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
                   height: kMapSize,
                   child: Stack(
                     children: [
-                      // Цветной контейнер на случай, если SVG прозрачный
                       ColoredBox(
-                        color: isDarkMode 
-                            ? const Color(0xFF0B132B) // Темный фон
-                            : const Color(0xFFF8FAFC), // Светлый фон
+                        color: isDarkMode
+                            ? const Color(0xFF0B132B)
+                            : const Color(0xFFF8FAFC),
                         child: SvgPicture.asset(
-                          // Подставляем нужную карту
                           isDarkMode
                               ? 'assets/images/main_map_dark.svg'
                               : 'assets/images/main_map_light.svg',
@@ -146,9 +178,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
                           height: kMapSize,
                         ),
                       ),
-                      // Цикл по зданиям: добавляем и хитбокс, и текст
-                      for (final b in buildings) ...[
-                        // 1. Невидимая кнопка для обработки нажатий
+
+                      // 1. Невидимые кнопки для обработки нажатий
+                      for (final b in buildings)
                         Positioned.fromRect(
                           rect: b.rect,
                           child: GestureDetector(
@@ -163,34 +195,53 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                     ? Border.all(color: Colors.red, width: 1)
                                     : null,
                               ),
-                              child: kShowHitboxes
-                                  ? FittedBox(
-                                      child: Text(
-                                        b.id,
-                                        style: const TextStyle(
-                                          color: Colors.red,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    )
-                                  : null,
+                            ),
+                          ),
+                        ),
+
+                      // 2. Иконки и Текст поверх зданий
+                      for (final b in buildings) ...[
+                        // Иконка категории (висящая над текстом)
+                        Positioned(
+                          left: b.center.dx - 12,
+                          top: b.center.dy - 35,
+                          child: IgnorePointer(
+                            child: Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: BoxDecoration(
+                                color: isDarkMode ? Colors.black87 : Colors.white,
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.2),
+                                    blurRadius: 4,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              child: Icon(
+                                _getIconForCategory(b.category),
+                                size: 14, // Размер иконки
+                                color: _getColorForCategory(b.category),
+                              ),
                             ),
                           ),
                         ),
                         
-                        // 2. Текст с названием здания (УБРАЛИ ОГРАНИЧЕНИЕ)
+                        // Текст
                         Positioned(
-                          left: b.center.dx, 
-                          top: b.center.dy,  
+                          left: b.center.dx,
+                          top: b.center.dy,
                           child: FractionalTranslation(
                             translation: const Offset(-0.5, -0.5),
                             child: IgnorePointer(
                               child: Container(
                                 constraints: const BoxConstraints(maxWidth: 130),
-                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 4, vertical: 2),
                                 decoration: BoxDecoration(
-                                  color: isDarkMode 
-                                      ? Colors.black.withValues(alpha: 0.6) 
+                                  color: isDarkMode
+                                      ? Colors.black.withValues(alpha: 0.6)
                                       : Colors.white.withValues(alpha: 0.8),
                                   borderRadius: BorderRadius.circular(4),
                                 ),
@@ -200,10 +251,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
-                                    // Динамический размер шрифта: для узких зданий меньше
                                     fontSize: b.width < 40 ? 9 : 12,
                                     fontWeight: FontWeight.w600,
-                                    color: isDarkMode ? Colors.white : Colors.black87,
+                                    color: isDarkMode
+                                        ? Colors.white
+                                        : Colors.black87,
                                   ),
                                 ),
                               ),
@@ -228,6 +280,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
   }
 }
 
+// 📌 КРАСИВЫЙ BOTTOM SHEET
 class _BuildingSheet extends StatelessWidget {
   const _BuildingSheet({required this.building});
 
@@ -236,21 +289,91 @@ class _BuildingSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+
+    // Получаем иконку для заголовка карточки
+    IconData getIcon(String cat) {
+      switch (cat) {
+        case 'dormitory':
+          return Icons.bed;
+        case 'sport':
+          return Icons.sports_soccer;
+        case 'food':
+          return Icons.restaurant;
+        case 'admin':
+          return Icons.admin_panel_settings;
+        default:
+          return Icons.school;
+      }
+    }
+
     return SafeArea(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+        padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(building.name, style: theme.textTheme.titleLarge),
-            const SizedBox(height: 8),
+            // Полоска для свайпа вниз (drag handle)
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 20),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade400,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            
+            // Заголовок с иконкой
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primaryContainer,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Icon(
+                    getIcon(building.category),
+                    color: theme.colorScheme.onPrimaryContainer,
+                    size: 28,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Text(
+                    building.name,
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            
+            // Описание
             Text(
               building.description.isEmpty
                   ? 'Описание пока не добавлено'
                   : building.description,
-              style: theme.textTheme.bodyMedium?.copyWith(
+              style: theme.textTheme.bodyLarge?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
+                height: 1.5,
+              ),
+            ),
+            const SizedBox(height: 24),
+            
+            // Кнопка действия (пока пустая)
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.tonal(
+                onPressed: () {
+                  // TODO: В будущем здесь будет создание задачи с привязкой к зданию
+                },
+                child: const Text('Создать задачу здесь'),
               ),
             ),
           ],
