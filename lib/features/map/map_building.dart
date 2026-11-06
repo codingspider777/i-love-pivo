@@ -9,6 +9,7 @@ class MapBuilding {
   const MapBuilding({
     required this.id,
     required this.name,
+    required this.category,
     required this.x,
     required this.y,
     required this.width,
@@ -18,6 +19,7 @@ class MapBuilding {
 
   final String id;
   final String name;
+  final String category; // 'academic', 'dormitory', 'sport', 'food', 'admin'
   final String description;
   final double x;
   final double y;
@@ -30,6 +32,8 @@ class MapBuilding {
   factory MapBuilding.fromJson(Map<String, dynamic> json) => MapBuilding(
         id: json['id'] as String,
         name: json['name'] as String,
+        // Если категории нет в JSON, по умолчанию ставим 'academic'
+        category: (json['category'] as String?) ?? 'academic', 
         description: (json['description'] as String?) ?? '',
         x: (json['x'] as num).toDouble(),
         y: (json['y'] as num).toDouble(),
