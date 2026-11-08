@@ -6,8 +6,20 @@ import 'package:salamanca/features/map/models/map_building.dart';
 /// Размер SVG-карты (должен совпадать с viewBox в main_map_light/dark.svg).
 const double kMapSize = 1500;
 
-/// ВЫКЛЮЧИЛ ОТЛАДКУ, чтобы красные рамки не мешали смотреть названия.
-const bool kShowHitboxes = false;
+/// Подписи маркеров показываются, начиная с этого масштаба.
+const double kLabelsMinScale = 1.4;
+
+/// Запас вокруг здания при попадании тапа (в пикселях экрана),
+/// чтобы узкие здания было проще нажимать.
+const double kHitSlop = 10;
+
+IconData categoryIcon(BuildingCategory c) => switch (c) {
+      BuildingCategory.academic => Icons.school,
+      BuildingCategory.dorm => Icons.bed,
+      BuildingCategory.sport => Icons.fitness_center,
+      BuildingCategory.food => Icons.restaurant,
+      BuildingCategory.service => Icons.place,
+    };
 
 class MapScreen extends ConsumerStatefulWidget {
   const MapScreen({super.key, this.focusBuildingId});
@@ -43,6 +55,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
     super.dispose();
   }
 
+  double get _scale => _controller.value.getMaxScaleOnAxis();
+
   Matrix4 _fitMatrix() {
     final s = (_viewport.shortestSide / kMapSize);
     final dx = (_viewport.width - kMapSize * s) / 2;
@@ -77,11 +91,40 @@ class _MapScreenState extends ConsumerState<MapScreen>
     }
   }
 
+  // ---------------------------------------------------------------------
+  // Тап по зданию: toScene + hit-test
+  // ---------------------------------------------------------------------
+
+  /// Находит здание под точкой [scenePoint] (координаты SVG).
+  /// Если подходит несколько — берём то, чей центр ближе к точке.
+  MapBuilding? _hitTest(List<MapBuilding> buildings, Offset scenePoint) {
+    final slop = kHitSlop / _scale;
+    MapBuilding? best;
+    var bestDist = double.infinity;
+    for (final b in buildings) {
+      if (!b.rect.inflate(slop).contains(scenePoint)) continue;
+      final d = (b.center - scenePoint).distanceSquared;
+      if (d < bestDist) {
+        bestDist = d;
+        best = b;
+      }
+    }
+    return best;
+  }
+
+  void _handleTap(List<MapBuilding> buildings, Offset viewportPoint) {
+    // Переводим точку из координат вьюпорта в координаты сцены (SVG).
+    final scenePoint = _controller.toScene(viewportPoint);
+    final hit = _hitTest(buildings, scenePoint);
+    if (hit != null) _onBuildingTap(hit);
+  }
+
   void _onBuildingTap(MapBuilding b) {
     setState(() => _selectedId = b.id);
     _focusBuilding(b);
     showModalBottomSheet<void>(
       context: context,
+      showDragHandle: true,
       builder: (context) => _BuildingSheet(building: b),
     ).whenComplete(() {
       if (mounted) setState(() => _selectedId = null);
@@ -107,8 +150,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
   Widget build(BuildContext context) {
     final buildingsAsync = ref.watch(buildingsProvider);
     final scheme = Theme.of(context).colorScheme;
-    
-    // Определяем, включена ли темная тема
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
@@ -120,98 +161,61 @@ class _MapScreenState extends ConsumerState<MapScreen>
           builder: (context, constraints) {
             _viewport = constraints.biggest;
             _initCamera(buildings);
-            return ClipRect(
-              child: InteractiveViewer(
-                transformationController: _controller,
-                constrained: false,
-                minScale: 0.2,
-                maxScale: 6,
-                boundaryMargin: const EdgeInsets.all(200),
-                child: SizedBox(
-                  width: kMapSize,
-                  height: kMapSize,
-                  child: Stack(
-                    children: [
-                      // Цветной контейнер на случай, если SVG прозрачный
-                      ColoredBox(
-                        color: isDarkMode 
-                            ? const Color(0xFF0B132B) // Темный фон
-                            : const Color(0xFFF8FAFC), // Светлый фон
-                        child: SvgPicture.asset(
-                          // Подставляем нужную карту
-                          isDarkMode
-                              ? 'assets/images/main_map_dark.svg'
-                              : 'assets/images/main_map_light.svg',
-                          width: kMapSize,
-                          height: kMapSize,
-                        ),
-                      ),
-                      // Цикл по зданиям: добавляем и хитбокс, и текст
-                      for (final b in buildings) ...[
-                        // 1. Невидимая кнопка для обработки нажатий
-                        Positioned.fromRect(
-                          rect: b.rect,
-                          child: GestureDetector(
-                            behavior: HitTestBehavior.opaque,
-                            onTap: () => _onBuildingTap(b),
-                            child: DecoratedBox(
-                              decoration: BoxDecoration(
-                                color: b.id == _selectedId
-                                    ? scheme.secondary.withValues(alpha: 0.45)
-                                    : null,
-                                border: kShowHitboxes
-                                    ? Border.all(color: Colors.red, width: 1)
-                                    : null,
-                              ),
-                              child: kShowHitboxes
-                                  ? FittedBox(
-                                      child: Text(
-                                        b.id,
-                                        style: const TextStyle(
-                                          color: Colors.red,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    )
-                                  : null,
-                            ),
+            return GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTapUp: (d) => _handleTap(buildings, d.localPosition),
+              child: ClipRect(
+                child: InteractiveViewer(
+                  transformationController: _controller,
+                  constrained: false,
+                  minScale: 0.2,
+                  maxScale: 6,
+                  boundaryMargin: const EdgeInsets.all(200),
+                  child: SizedBox(
+                    width: kMapSize,
+                    height: kMapSize,
+                    child: Stack(
+                      children: [
+                        ColoredBox(
+                          color: isDarkMode
+                              ? const Color(0xFF0B132B)
+                              : const Color(0xFFF8FAFC),
+                          child: SvgPicture.asset(
+                            isDarkMode
+                                ? 'assets/images/main_map_dark.svg'
+                                : 'assets/images/main_map_light.svg',
+                            width: kMapSize,
+                            height: kMapSize,
                           ),
                         ),
-                        
-                        // 2. Текст с названием здания (УБРАЛИ ОГРАНИЧЕНИЕ)
-                        Positioned(
-                          left: b.center.dx, 
-                          top: b.center.dy,  
-                          child: FractionalTranslation(
-                            translation: const Offset(-0.5, -0.5),
-                            child: IgnorePointer(
-                              child: Container(
-                                constraints: const BoxConstraints(maxWidth: 130),
-                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: isDarkMode 
-                                      ? Colors.black.withValues(alpha: 0.6) 
-                                      : Colors.white.withValues(alpha: 0.8),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Text(
-                                  b.name,
-                                  textAlign: TextAlign.center,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    // Динамический размер шрифта: для узких зданий меньше
-                                    fontSize: b.width < 40 ? 9 : 12,
-                                    fontWeight: FontWeight.w600,
-                                    color: isDarkMode ? Colors.white : Colors.black87,
+                        // Подсветка выбранного здания.
+                        for (final b in buildings)
+                          if (b.id == _selectedId)
+                            Positioned.fromRect(
+                              rect: b.rect,
+                              child: IgnorePointer(
+                                child: DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    color:
+                                        scheme.secondary.withValues(alpha: 0.45),
                                   ),
                                 ),
                               ),
                             ),
+                        // Маркеры POI (Stack + Positioned).
+                        IgnorePointer(
+                          child: ValueListenableBuilder<Matrix4>(
+                            valueListenable: _controller,
+                            builder: (context, matrix, _) => _PoiLayer(
+                              buildings: buildings,
+                              scale: matrix.getMaxScaleOnAxis(),
+                              selectedId: _selectedId,
+                              isDark: isDarkMode,
+                            ),
                           ),
                         ),
                       ],
-                    ],
+                    ),
                   ),
                 ),
               ),
@@ -228,6 +232,113 @@ class _MapScreenState extends ConsumerState<MapScreen>
   }
 }
 
+/// Слой маркеров. Маркеры и подписи компенсируют масштаб карты (1 / scale),
+/// поэтому на экране всегда имеют постоянный размер.
+class _PoiLayer extends StatelessWidget {
+  const _PoiLayer({
+    required this.buildings,
+    required this.scale,
+    required this.selectedId,
+    required this.isDark,
+  });
+
+  final List<MapBuilding> buildings;
+  final double scale;
+  final String? selectedId;
+  final bool isDark;
+
+  static const double _markerSize = 24;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final inv = 1 / scale;
+
+    return SizedBox(
+      width: kMapSize,
+      height: kMapSize,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          for (final b in buildings) ...[
+            // Круглый маркер по центру здания.
+            Positioned(
+              left: b.center.dx,
+              top: b.center.dy,
+              child: FractionalTranslation(
+                translation: const Offset(-0.5, -0.5),
+                child: Transform.scale(
+                  scale: inv,
+                  child: Container(
+                    width: _markerSize,
+                    height: _markerSize,
+                    decoration: BoxDecoration(
+                      color: b.id == selectedId
+                          ? scheme.primary
+                          : scheme.surface,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: scheme.primary, width: 2),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Color(0x33000000),
+                          blurRadius: 4,
+                          offset: Offset(0, 1),
+                        ),
+                      ],
+                    ),
+                    child: Icon(
+                      categoryIcon(b.category),
+                      size: 14,
+                      color: b.id == selectedId
+                          ? scheme.onPrimary
+                          : scheme.primary,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            // Подпись под маркером: при приближении и для выбранного здания.
+            if (scale >= kLabelsMinScale || b.id == selectedId)
+              Positioned(
+                left: b.center.dx,
+                top: b.center.dy + (_markerSize / 2 + 2) * inv,
+                child: FractionalTranslation(
+                  translation: const Offset(-0.5, 0),
+                  child: Transform.scale(
+                    scale: inv,
+                    alignment: Alignment.topCenter,
+                    child: Container(
+                      constraints: const BoxConstraints(maxWidth: 130),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 4, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? Colors.black.withValues(alpha: 0.65)
+                            : Colors.white.withValues(alpha: 0.85),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        b.name,
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? Colors.white : Colors.black87,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 class _BuildingSheet extends StatelessWidget {
   const _BuildingSheet({required this.building});
 
@@ -236,21 +347,61 @@ class _BuildingSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final b = building;
+
     return SafeArea(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(building.name, style: theme.textTheme.titleLarge),
-            const SizedBox(height: 8),
+            Row(
+              children: [
+                CircleAvatar(
+                  backgroundColor: scheme.primary.withValues(alpha: 0.12),
+                  child: Icon(categoryIcon(b.category), color: scheme.primary),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(b.name, style: theme.textTheme.titleLarge),
+                      Text(
+                        b.category.label,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            if (b.address.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.location_on_outlined,
+                      size: 18, color: scheme.onSurfaceVariant),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child:
+                        Text(b.address, style: theme.textTheme.bodyMedium),
+                  ),
+                ],
+              ),
+            ],
+            const SizedBox(height: 12),
             Text(
-              building.description.isEmpty
+              b.description.isEmpty
                   ? 'Описание пока не добавлено'
-                  : building.description,
+                  : b.description,
               style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
+                color: scheme.onSurfaceVariant,
               ),
             ),
           ],
