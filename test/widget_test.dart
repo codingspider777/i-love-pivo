@@ -22,10 +22,15 @@ void main() {
 
     expect(find.byType(MyApp), findsOneWidget);
     expect(find.text('Календарь'), findsOneWidget);
+
+    // Добавьте эту строку: очистите дерево виджетов, чтобы запустить логику очистки Drift/Riverpod
+// В конце теста
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 100)); // Дать таймеру время сработать
   });
 
   testWidgets('Editor shows validation error for empty title',
-      (WidgetTester tester) async {
+          (WidgetTester tester) async {
     await pumpApp(tester);
 
     await tester.tap(find.byIcon(Icons.add));
@@ -37,5 +42,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Введите название задачи'), findsOneWidget);
+
+// В конце теста
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 100)); // Дать таймеру время сработать
   });
 }
