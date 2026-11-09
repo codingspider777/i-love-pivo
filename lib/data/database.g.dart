@@ -3,7 +3,7 @@
 part of 'database.dart';
 
 // ignore_for_file: type=lint
-class $TasksTable extends Tasks with TableInfo<$TasksTable, Task> {
+class $TasksTable extends Tasks with TableInfo<$TasksTable, TaskRow> {
   @override
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
@@ -82,6 +82,33 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, Task> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _priorityMeta = const VerificationMeta(
+    'priority',
+  );
+  @override
+  late final GeneratedColumn<int> priority = GeneratedColumn<int>(
+    'priority',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1),
+  );
+  static const VerificationMeta _hasTimeMeta = const VerificationMeta(
+    'hasTime',
+  );
+  @override
+  late final GeneratedColumn<bool> hasTime = GeneratedColumn<bool>(
+    'has_time',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("has_time" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -90,6 +117,8 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, Task> {
     dueTime,
     isCompleted,
     buildingId,
+    priority,
+    hasTime,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -98,7 +127,7 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, Task> {
   static const String $name = 'tasks';
   @override
   VerificationContext validateIntegrity(
-    Insertable<Task> instance, {
+    Insertable<TaskRow> instance, {
     bool isInserting = false,
   }) {
     final context = VerificationContext();
@@ -146,15 +175,27 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, Task> {
         buildingId.isAcceptableOrUnknown(data['building_id']!, _buildingIdMeta),
       );
     }
+    if (data.containsKey('priority')) {
+      context.handle(
+        _priorityMeta,
+        priority.isAcceptableOrUnknown(data['priority']!, _priorityMeta),
+      );
+    }
+    if (data.containsKey('has_time')) {
+      context.handle(
+        _hasTimeMeta,
+        hasTime.isAcceptableOrUnknown(data['has_time']!, _hasTimeMeta),
+      );
+    }
     return context;
   }
 
   @override
   Set<GeneratedColumn> get $primaryKey => {id};
   @override
-  Task map(Map<String, dynamic> data, {String? tablePrefix}) {
+  TaskRow map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return Task(
+    return TaskRow(
       id: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}id'],
@@ -179,6 +220,14 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, Task> {
         DriftSqlType.string,
         data['${effectivePrefix}building_id'],
       ),
+      priority: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}priority'],
+      )!,
+      hasTime: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}has_time'],
+      )!,
     );
   }
 
@@ -188,20 +237,24 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, Task> {
   }
 }
 
-class Task extends DataClass implements Insertable<Task> {
+class TaskRow extends DataClass implements Insertable<TaskRow> {
   final int id;
   final String title;
   final String? description;
   final DateTime dueTime;
   final bool isCompleted;
   final String? buildingId;
-  const Task({
+  final int priority;
+  final bool hasTime;
+  const TaskRow({
     required this.id,
     required this.title,
     this.description,
     required this.dueTime,
     required this.isCompleted,
     this.buildingId,
+    required this.priority,
+    required this.hasTime,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -216,6 +269,8 @@ class Task extends DataClass implements Insertable<Task> {
     if (!nullToAbsent || buildingId != null) {
       map['building_id'] = Variable<String>(buildingId);
     }
+    map['priority'] = Variable<int>(priority);
+    map['has_time'] = Variable<bool>(hasTime);
     return map;
   }
 
@@ -231,21 +286,25 @@ class Task extends DataClass implements Insertable<Task> {
       buildingId: buildingId == null && nullToAbsent
           ? const Value.absent()
           : Value(buildingId),
+      priority: Value(priority),
+      hasTime: Value(hasTime),
     );
   }
 
-  factory Task.fromJson(
+  factory TaskRow.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
   }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
-    return Task(
+    return TaskRow(
       id: serializer.fromJson<int>(json['id']),
       title: serializer.fromJson<String>(json['title']),
       description: serializer.fromJson<String?>(json['description']),
       dueTime: serializer.fromJson<DateTime>(json['dueTime']),
       isCompleted: serializer.fromJson<bool>(json['isCompleted']),
       buildingId: serializer.fromJson<String?>(json['buildingId']),
+      priority: serializer.fromJson<int>(json['priority']),
+      hasTime: serializer.fromJson<bool>(json['hasTime']),
     );
   }
   @override
@@ -258,26 +317,32 @@ class Task extends DataClass implements Insertable<Task> {
       'dueTime': serializer.toJson<DateTime>(dueTime),
       'isCompleted': serializer.toJson<bool>(isCompleted),
       'buildingId': serializer.toJson<String?>(buildingId),
+      'priority': serializer.toJson<int>(priority),
+      'hasTime': serializer.toJson<bool>(hasTime),
     };
   }
 
-  Task copyWith({
+  TaskRow copyWith({
     int? id,
     String? title,
     Value<String?> description = const Value.absent(),
     DateTime? dueTime,
     bool? isCompleted,
     Value<String?> buildingId = const Value.absent(),
-  }) => Task(
+    int? priority,
+    bool? hasTime,
+  }) => TaskRow(
     id: id ?? this.id,
     title: title ?? this.title,
     description: description.present ? description.value : this.description,
     dueTime: dueTime ?? this.dueTime,
     isCompleted: isCompleted ?? this.isCompleted,
     buildingId: buildingId.present ? buildingId.value : this.buildingId,
+    priority: priority ?? this.priority,
+    hasTime: hasTime ?? this.hasTime,
   );
-  Task copyWithCompanion(TasksCompanion data) {
-    return Task(
+  TaskRow copyWithCompanion(TasksCompanion data) {
+    return TaskRow(
       id: data.id.present ? data.id.value : this.id,
       title: data.title.present ? data.title.value : this.title,
       description: data.description.present
@@ -290,44 +355,60 @@ class Task extends DataClass implements Insertable<Task> {
       buildingId: data.buildingId.present
           ? data.buildingId.value
           : this.buildingId,
+      priority: data.priority.present ? data.priority.value : this.priority,
+      hasTime: data.hasTime.present ? data.hasTime.value : this.hasTime,
     );
   }
 
   @override
   String toString() {
-    return (StringBuffer('Task(')
+    return (StringBuffer('TaskRow(')
           ..write('id: $id, ')
           ..write('title: $title, ')
           ..write('description: $description, ')
           ..write('dueTime: $dueTime, ')
           ..write('isCompleted: $isCompleted, ')
-          ..write('buildingId: $buildingId')
+          ..write('buildingId: $buildingId, ')
+          ..write('priority: $priority, ')
+          ..write('hasTime: $hasTime')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode =>
-      Object.hash(id, title, description, dueTime, isCompleted, buildingId);
+  int get hashCode => Object.hash(
+    id,
+    title,
+    description,
+    dueTime,
+    isCompleted,
+    buildingId,
+    priority,
+    hasTime,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      (other is Task &&
+      (other is TaskRow &&
           other.id == this.id &&
           other.title == this.title &&
           other.description == this.description &&
           other.dueTime == this.dueTime &&
           other.isCompleted == this.isCompleted &&
-          other.buildingId == this.buildingId);
+          other.buildingId == this.buildingId &&
+          other.priority == this.priority &&
+          other.hasTime == this.hasTime);
 }
 
-class TasksCompanion extends UpdateCompanion<Task> {
+class TasksCompanion extends UpdateCompanion<TaskRow> {
   final Value<int> id;
   final Value<String> title;
   final Value<String?> description;
   final Value<DateTime> dueTime;
   final Value<bool> isCompleted;
   final Value<String?> buildingId;
+  final Value<int> priority;
+  final Value<bool> hasTime;
   const TasksCompanion({
     this.id = const Value.absent(),
     this.title = const Value.absent(),
@@ -335,6 +416,8 @@ class TasksCompanion extends UpdateCompanion<Task> {
     this.dueTime = const Value.absent(),
     this.isCompleted = const Value.absent(),
     this.buildingId = const Value.absent(),
+    this.priority = const Value.absent(),
+    this.hasTime = const Value.absent(),
   });
   TasksCompanion.insert({
     this.id = const Value.absent(),
@@ -343,15 +426,19 @@ class TasksCompanion extends UpdateCompanion<Task> {
     required DateTime dueTime,
     this.isCompleted = const Value.absent(),
     this.buildingId = const Value.absent(),
+    this.priority = const Value.absent(),
+    this.hasTime = const Value.absent(),
   }) : title = Value(title),
        dueTime = Value(dueTime);
-  static Insertable<Task> custom({
+  static Insertable<TaskRow> custom({
     Expression<int>? id,
     Expression<String>? title,
     Expression<String>? description,
     Expression<DateTime>? dueTime,
     Expression<bool>? isCompleted,
     Expression<String>? buildingId,
+    Expression<int>? priority,
+    Expression<bool>? hasTime,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -360,6 +447,8 @@ class TasksCompanion extends UpdateCompanion<Task> {
       if (dueTime != null) 'due_time': dueTime,
       if (isCompleted != null) 'is_completed': isCompleted,
       if (buildingId != null) 'building_id': buildingId,
+      if (priority != null) 'priority': priority,
+      if (hasTime != null) 'has_time': hasTime,
     });
   }
 
@@ -370,6 +459,8 @@ class TasksCompanion extends UpdateCompanion<Task> {
     Value<DateTime>? dueTime,
     Value<bool>? isCompleted,
     Value<String?>? buildingId,
+    Value<int>? priority,
+    Value<bool>? hasTime,
   }) {
     return TasksCompanion(
       id: id ?? this.id,
@@ -378,6 +469,8 @@ class TasksCompanion extends UpdateCompanion<Task> {
       dueTime: dueTime ?? this.dueTime,
       isCompleted: isCompleted ?? this.isCompleted,
       buildingId: buildingId ?? this.buildingId,
+      priority: priority ?? this.priority,
+      hasTime: hasTime ?? this.hasTime,
     );
   }
 
@@ -402,6 +495,12 @@ class TasksCompanion extends UpdateCompanion<Task> {
     if (buildingId.present) {
       map['building_id'] = Variable<String>(buildingId.value);
     }
+    if (priority.present) {
+      map['priority'] = Variable<int>(priority.value);
+    }
+    if (hasTime.present) {
+      map['has_time'] = Variable<bool>(hasTime.value);
+    }
     return map;
   }
 
@@ -413,7 +512,9 @@ class TasksCompanion extends UpdateCompanion<Task> {
           ..write('description: $description, ')
           ..write('dueTime: $dueTime, ')
           ..write('isCompleted: $isCompleted, ')
-          ..write('buildingId: $buildingId')
+          ..write('buildingId: $buildingId, ')
+          ..write('priority: $priority, ')
+          ..write('hasTime: $hasTime')
           ..write(')'))
         .toString();
   }
@@ -1060,6 +1161,8 @@ typedef $$TasksTableCreateCompanionBuilder = TasksCompanion Function({
   required DateTime dueTime,
   Value<bool> isCompleted,
   Value<String?> buildingId,
+  Value<int> priority,
+  Value<bool> hasTime,
 });
 typedef $$TasksTableUpdateCompanionBuilder = TasksCompanion Function({
   Value<int> id,
@@ -1068,6 +1171,8 @@ typedef $$TasksTableUpdateCompanionBuilder = TasksCompanion Function({
   Value<DateTime> dueTime,
   Value<bool> isCompleted,
   Value<String?> buildingId,
+  Value<int> priority,
+  Value<bool> hasTime,
 });
 
 class $$TasksTableFilterComposer extends Composer<_$AppDatabase, $TasksTable> {
@@ -1105,6 +1210,16 @@ class $$TasksTableFilterComposer extends Composer<_$AppDatabase, $TasksTable> {
 
   ColumnFilters<String> get buildingId => $composableBuilder(
     column: $table.buildingId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get priority => $composableBuilder(
+    column: $table.priority,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get hasTime => $composableBuilder(
+    column: $table.hasTime,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -1147,6 +1262,16 @@ class $$TasksTableOrderingComposer
     column: $table.buildingId,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<int> get priority => $composableBuilder(
+    column: $table.priority,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get hasTime => $composableBuilder(
+    column: $table.hasTime,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$TasksTableAnnotationComposer
@@ -1181,6 +1306,12 @@ class $$TasksTableAnnotationComposer
     column: $table.buildingId,
     builder: (column) => column,
   );
+
+  GeneratedColumn<int> get priority =>
+      $composableBuilder(column: $table.priority, builder: (column) => column);
+
+  GeneratedColumn<bool> get hasTime =>
+      $composableBuilder(column: $table.hasTime, builder: (column) => column);
 }
 
 class $$TasksTableTableManager
@@ -1188,14 +1319,14 @@ class $$TasksTableTableManager
         RootTableManager<
           _$AppDatabase,
           $TasksTable,
-          Task,
+          TaskRow,
           $$TasksTableFilterComposer,
           $$TasksTableOrderingComposer,
           $$TasksTableAnnotationComposer,
           $$TasksTableCreateCompanionBuilder,
           $$TasksTableUpdateCompanionBuilder,
-          (Task, BaseReferences<_$AppDatabase, $TasksTable, Task>),
-          Task,
+          (TaskRow, BaseReferences<_$AppDatabase, $TasksTable, TaskRow>),
+          TaskRow,
           PrefetchHooks Function()
         > {
   $$TasksTableTableManager(_$AppDatabase db, $TasksTable table)
@@ -1217,6 +1348,8 @@ class $$TasksTableTableManager
                 Value<DateTime> dueTime = const Value.absent(),
                 Value<bool> isCompleted = const Value.absent(),
                 Value<String?> buildingId = const Value.absent(),
+                Value<int> priority = const Value.absent(),
+                Value<bool> hasTime = const Value.absent(),
               }) => TasksCompanion(
                 id: id,
                 title: title,
@@ -1224,6 +1357,8 @@ class $$TasksTableTableManager
                 dueTime: dueTime,
                 isCompleted: isCompleted,
                 buildingId: buildingId,
+                priority: priority,
+                hasTime: hasTime,
               ),
           createCompanionCallback:
               ({
@@ -1233,6 +1368,8 @@ class $$TasksTableTableManager
                 required DateTime dueTime,
                 Value<bool> isCompleted = const Value.absent(),
                 Value<String?> buildingId = const Value.absent(),
+                Value<int> priority = const Value.absent(),
+                Value<bool> hasTime = const Value.absent(),
               }) => TasksCompanion.insert(
                 id: id,
                 title: title,
@@ -1240,12 +1377,14 @@ class $$TasksTableTableManager
                 dueTime: dueTime,
                 isCompleted: isCompleted,
                 buildingId: buildingId,
+                priority: priority,
+                hasTime: hasTime,
               ),
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable<$TasksTable, Task>(table),
-                  BaseReferences<_$AppDatabase, $TasksTable, Task>(
+                  e.readTable<$TasksTable, TaskRow>(table),
+                  BaseReferences<_$AppDatabase, $TasksTable, TaskRow>(
                     db,
                     table,
                     e,
@@ -1262,14 +1401,14 @@ typedef $$TasksTableProcessedTableManager =
     ProcessedTableManager<
       _$AppDatabase,
       $TasksTable,
-      Task,
+      TaskRow,
       $$TasksTableFilterComposer,
       $$TasksTableOrderingComposer,
       $$TasksTableAnnotationComposer,
       $$TasksTableCreateCompanionBuilder,
       $$TasksTableUpdateCompanionBuilder,
-      (Task, BaseReferences<_$AppDatabase, $TasksTable, Task>),
-      Task,
+      (TaskRow, BaseReferences<_$AppDatabase, $TasksTable, TaskRow>),
+      TaskRow,
       PrefetchHooks Function()
     >;
 typedef $$BuildingsTableCreateCompanionBuilder = BuildingsCompanion Function({
