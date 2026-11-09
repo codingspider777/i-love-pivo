@@ -7,6 +7,7 @@ import 'package:salamanca/core/theme/app_theme.dart';
 import 'data/database.dart';
 import 'data/daos/tasks_dao.dart';
 import 'data/repositories/task_repository.dart';
+import 'core/services/notification_service.dart';
 
 // 1. Провайдер для базы данных
 final databaseProvider = Provider<AppDatabase>((ref) {
@@ -25,7 +26,16 @@ final taskRepositoryProvider = Provider<TaskRepository>((ref) {
   return TaskRepository(dao);
 });
 
-void main() {
+// 4. Провайдер для Сервиса уведомлений
+final notificationServiceProvider = Provider<NotificationService>((ref) {
+  return NotificationService();
+});
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final notificationService = NotificationService();
+  await notificationService.init();
+  await notificationService.requestPermissions();
   runApp(
     // Оборачиваем приложение в ProviderScope
     const ProviderScope(
