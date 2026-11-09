@@ -15,28 +15,27 @@ dependencies:
   go_router: ^18.1.2
   flutter_riverpod: ^3.4.3
   drift: ^2.35.3
-  drift_flutter: ^0.3.1
+  drift_flutter: ^0.3.1 # Возвращено на актуальную версию
   path_provider: ^2.1.6
   table_calendar: ^3.3.0
   intl: ^0.20.3
   flutter_localizations:
     sdk: flutter
+  url_launcher: ^6.2.5
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   mocktail: ^1.0.4
-  drift_dev: ^2.20.0
+  drift_dev: ^2.35.3 # Синхронизировано с drift
   build_runner: ^2.4.9
   flutter_lints: ^6.0.0
-  # Добавили пакет для иконок
   flutter_launcher_icons: ^0.14.1
 
 flutter:
   uses-material-design: true
 
   assets:
-    # Обновили пути к картам (светлая и темная)
     - assets/images/main_map_light.svg
     - assets/images/main_map_dark.svg
     - assets/data/buildings.json
@@ -52,7 +51,6 @@ flutter:
         - asset: assets/fonts/Inter_18pt-Bold.ttf
           weight: 700
 
-# --- НАСТРОЙКА ИКОНОК ---
 flutter_launcher_icons:
   android: "launcher_icon"
   ios: true

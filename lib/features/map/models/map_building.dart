@@ -3,8 +3,24 @@ import 'dart:ui';
 
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:salamanca/features/map/models/building_content.dart'; // Новый импорт
 
-/// Здание на карте. Координаты — в системе SVG (viewBox 0 0 1500 1500).
+enum BuildingCategory {
+  academic('Учебное здание'),
+  dorm('Общежитие'),
+  sport('Спорт'),
+  food('Питание'),
+  service('Инфраструктура');
+
+  const BuildingCategory(this.label);
+  final String label;
+
+  static BuildingCategory parse(String? value) {
+    return BuildingCategory.values.asNameMap()[value] ??
+        BuildingCategory.service;
+  }
+}
+
 class MapBuilding {
   const MapBuilding({
     required this.id,
@@ -14,15 +30,23 @@ class MapBuilding {
     required this.width,
     required this.height,
     this.description = '',
+    this.address = '',
+    this.category = BuildingCategory.service,
+    this.content = const [],       // Новое поле для богатого контента
+    this.polygon,                  // Новое поле для точных хитбоксов
   });
 
   final String id;
   final String name;
   final String description;
+  final String address;
+  final BuildingCategory category;
   final double x;
   final double y;
   final double width;
   final double height;
+  final List<ContentBlock> content;
+  final List<Offset>? polygon;
 
   Rect get rect => Rect.fromLTWH(x, y, width, height);
   Offset get center => rect.center;
@@ -31,14 +55,28 @@ class MapBuilding {
         id: json['id'] as String,
         name: json['name'] as String,
         description: (json['description'] as String?) ?? '',
+        address: (json['address'] as String?) ?? '',
+        category: BuildingCategory.parse(json['category'] as String?),
         x: (json['x'] as num).toDouble(),
         y: (json['y'] as num).toDouble(),
         width: (json['width'] as num).toDouble(),
         height: (json['height'] as num).toDouble(),
+        // Парсим блоки контента
+        content: (json['content'] as List<dynamic>?)
+                ?.map((e) => ContentBlock.tryParse(e as Map<String, dynamic>))
+                .whereType<ContentBlock>()
+                .toList() ??
+            [],
+        // Парсим полигон (если он есть в JSON)
+        polygon: (json['polygon'] as List<dynamic>?)
+            ?.map((p) => Offset(
+                  (p['x'] as num).toDouble(),
+                  (p['y'] as num).toDouble(),
+                ))
+            .toList(),
       );
 }
 
-/// Загружает assets/data/buildings.json один раз.
 final buildingsProvider = FutureProvider<List<MapBuilding>>((ref) async {
   final raw = await rootBundle.loadString('assets/data/buildings.json');
   final list = jsonDecode(raw) as List<dynamic>;
