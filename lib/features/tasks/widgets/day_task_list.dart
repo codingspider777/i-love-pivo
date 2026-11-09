@@ -83,6 +83,7 @@ class _EmptyState extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+<<<<<<< HEAD
     return LayoutBuilder(
       builder: (context, constraints) {
         return SingleChildScrollView(
@@ -117,6 +118,42 @@ class _EmptyState extends StatelessWidget {
           ),
         );
       },
+=======
+
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 96,
+              height: 96,
+              decoration: BoxDecoration(
+                color: scheme.secondary.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.event_available,
+                size: 48,
+                color: scheme.secondary,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'На этот день задач нет',
+              style: theme.textTheme.titleMedium,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Нажмите «+», чтобы добавить',
+              style: theme.textTheme.bodyMedium
+                  ?.copyWith(color: scheme.onSurfaceVariant),
+            ),
+          ],
+        ),
+      ),
+>>>>>>> 0f1117a8f99fdc0c2d7910403d5bc9562656f85f
     );
   }
 }
