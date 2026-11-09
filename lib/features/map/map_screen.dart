@@ -34,6 +34,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
   double _fitScale = 0.5; 
   String? _selectedId;
   bool _isInitialized = false;
+  bool _isAnimatingFocus = false;
 
   @override
   void initState() {
@@ -54,7 +55,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
     super.dispose();
   }
 
-  // Утилита для жесткого ограничения любой матрицы (защита от вылета за края)
   Matrix4 _clampMatrix(Matrix4 matrix) {
     if (_viewport == Size.zero) return matrix;
     
@@ -79,19 +79,18 @@ class _MapScreenState extends ConsumerState<MapScreen>
       dy = dy.clamp(_viewport.height - mapHeight, 0.0);
     }
     
-    return Matrix4.identity()
-      ..translate(dx, dy)
-      ..scale(clampedScale);
+    // ИСПРАВЛЕНИЕ: Убраны устаревшие .translate() и .scale()
+    return Matrix4.translationValues(dx, dy, 0)
+        .multiplied(Matrix4.diagonal3Values(clampedScale, clampedScale, 1));
   }
 
-  // Слушатель контролирует жесты пользователя
   void _onMatrixChanged() {
+    if (_isAnimatingFocus) return;
     if (_viewport == Size.zero) return;
     
     final matrix = _controller.value;
     final clamped = _clampMatrix(matrix);
     
-    // Если матрица вышла за пределы, принудительно возвращаем её
     if (clamped != matrix) {
       _controller.value = clamped;
     }
@@ -107,34 +106,42 @@ class _MapScreenState extends ConsumerState<MapScreen>
         .multiplied(Matrix4.diagonal3Values(s, s, 1));
   }
 
-  // Вычисляем матрицу для фокуса на здании. Ограничиваем её сразу, 
-  // чтобы анимация знала точный конечный пункт назначения.
   Matrix4 _focusMatrix(Offset point, double scale) {
     final tx = _viewport.width / 2 - point.dx * scale;
     final ty = _viewport.height / 2 - point.dy * scale;
-    final target = Matrix4.translationValues(tx, ty, 0)
+    return Matrix4.translationValues(tx, ty, 0)
         .multiplied(Matrix4.diagonal3Values(scale, scale, 1));
-        
-    return _clampMatrix(target);
   }
 
-  void _animateTo(Matrix4 target) {
-    final safeTarget = _clampMatrix(target);
+  void _animateTo(Matrix4 target, {bool isFocus = false}) {
+    final safeTarget = isFocus ? target : _clampMatrix(target);
+    
+    _isAnimatingFocus = isFocus;
+    
     final tween = Matrix4Tween(begin: _controller.value, end: safeTarget);
     final curved = CurvedAnimation(parent: _anim, curve: Curves.easeInOut);
+    
     void listener() => _controller.value = tween.evaluate(curved);
+    
     _anim
       ..reset()
       ..addListener(listener)
-      ..forward().whenComplete(() => _anim.removeListener(listener));
+      ..forward().whenComplete(() {
+        _anim.removeListener(listener);
+        _isAnimatingFocus = false;
+      });
   }
 
   void _focusBuilding(MapBuilding b, {bool animate = true}) {
-    final target = _focusMatrix(b.center, 2.5);
+    final targetScale = 2.5.clamp(_fitScale, 6.0);
+    final target = _focusMatrix(b.center, targetScale);
+    
     if (animate) {
-      _animateTo(target);
+      _animateTo(target, isFocus: true);
     } else {
+      _isAnimatingFocus = true;
       _controller.value = target;
+      _isAnimatingFocus = false;
     }
   }
 
@@ -229,7 +236,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                   final id = widget.focusBuildingId;
                   final target = buildings.where((b) => b.id == id).firstOrNull;
                   if (target != null) {
-                    _controller.value = _focusMatrix(target.center, 2.5);
+                    _focusBuilding(target, animate: false);
                   } else {
                     _controller.value = _fitMatrix();
                   }
@@ -242,6 +249,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                 GestureDetector(
                   behavior: HitTestBehavior.translucent,
                   onTapUp: (d) => _handleTap(buildings, d.localPosition),
+                  onPanDown: (_) => _isAnimatingFocus = false,
                   child: ClipRect(
                     child: InteractiveViewer(
                       transformationController: _controller,
@@ -249,6 +257,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
                       minScale: 0.01,
                       maxScale: 50.0,
                       boundaryMargin: const EdgeInsets.all(100000.0),
+                      onInteractionStart: (_) {
+                        _isAnimatingFocus = false;
+                      },
                       child: SizedBox(
                         width: kMapSize,
                         height: kMapSize,

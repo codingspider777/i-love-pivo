@@ -49,9 +49,10 @@ sealed class ContentBlock {
         final img = ImageRef.tryParse(j);
         return img == null ? null : ImageBlock(img);
       case 'gallery':
+        // ИСПРАВЛЕНО: Используем null-aware маркер '?' для списков (Dart 3)
         final imgs = [
           for (final raw in (j['images'] as List? ?? const []))
-            if (ImageRef.tryParse(raw) case final img?) img,
+            ?ImageRef.tryParse(raw),
         ];
         return imgs.isEmpty ? null : GalleryBlock(imgs);
       case 'info':
