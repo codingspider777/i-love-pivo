@@ -83,29 +83,39 @@ class _EmptyState extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+
     return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 96,
-            height: 96,
-            decoration: BoxDecoration(
-              color: scheme.secondary.withValues(alpha: 0.12),
-              shape: BoxShape.circle,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 96,
+              height: 96,
+              decoration: BoxDecoration(
+                color: scheme.secondary.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.event_available,
+                size: 48,
+                color: scheme.secondary,
+              ),
             ),
-            child:
-                Icon(Icons.event_available, size: 48, color: scheme.secondary),
-          ),
-          const SizedBox(height: 16),
-          Text('На этот день задач нет', style: theme.textTheme.titleMedium),
-          const SizedBox(height: 4),
-          Text(
-            'Нажмите «+», чтобы добавить',
-            style: theme.textTheme.bodyMedium
-                ?.copyWith(color: scheme.onSurfaceVariant),
-          ),
-        ],
+            const SizedBox(height: 16),
+            Text(
+              'На этот день задач нет',
+              style: theme.textTheme.titleMedium,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Нажмите «+», чтобы добавить',
+              style: theme.textTheme.bodyMedium
+                  ?.copyWith(color: scheme.onSurfaceVariant),
+            ),
+          ],
+        ),
       ),
     );
   }
