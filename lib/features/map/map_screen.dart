@@ -2,19 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:salamanca/features/map/models/map_building.dart';
-import 'package:salamanca/features/map/widgets/building_sheet.dart';
+import 'package:salamanca/features/map/widgets/building_sheet.dart'; // даёт categoryIcon
+import 'package:salamanca/shared/widgets/app_choice_chip.dart';
 
 const double kMapSize = 1500;
 const double kLabelsMinScale = 1.4;
 const double kHitSlop = 10;
-
-IconData categoryIcon(BuildingCategory c) => switch (c) {
-      BuildingCategory.academic => Icons.school,
-      BuildingCategory.dorm => Icons.bed,
-      BuildingCategory.sport => Icons.fitness_center,
-      BuildingCategory.food => Icons.restaurant,
-      BuildingCategory.service => Icons.place,
-    };
 
 class MapScreen extends ConsumerStatefulWidget {
   const MapScreen({super.key, this.focusBuildingId});
@@ -29,12 +22,15 @@ class _MapScreenState extends ConsumerState<MapScreen>
     with SingleTickerProviderStateMixin {
   final TransformationController _controller = TransformationController();
   late final AnimationController _anim;
-  
+
   Size _viewport = Size.zero;
-  double _fitScale = 0.5; 
+  double _fitScale = 0.5;
   String? _selectedId;
   bool _isInitialized = false;
   bool _isAnimatingFocus = false;
+
+  /// Выбранные категории. Пустой набор = показывать все.
+  final Set<BuildingCategory> _filters = {};
 
   @override
   void initState() {
@@ -57,29 +53,28 @@ class _MapScreenState extends ConsumerState<MapScreen>
 
   Matrix4 _clampMatrix(Matrix4 matrix) {
     if (_viewport == Size.zero) return matrix;
-    
+
     final scale = matrix.getMaxScaleOnAxis();
     final clampedScale = scale.clamp(_fitScale, 6.0);
-    
+
     final mapWidth = kMapSize * clampedScale;
     final mapHeight = kMapSize * clampedScale;
-    
+
     double dx = matrix.getTranslation().x;
     double dy = matrix.getTranslation().y;
-    
+
     if (mapWidth <= _viewport.width) {
       dx = (_viewport.width - mapWidth) / 2;
     } else {
       dx = dx.clamp(_viewport.width - mapWidth, 0.0);
     }
-    
+
     if (mapHeight <= _viewport.height) {
       dy = (_viewport.height - mapHeight) / 2;
     } else {
       dy = dy.clamp(_viewport.height - mapHeight, 0.0);
     }
-    
-    // ИСПРАВЛЕНИЕ: Убраны устаревшие .translate() и .scale()
+
     return Matrix4.translationValues(dx, dy, 0)
         .multiplied(Matrix4.diagonal3Values(clampedScale, clampedScale, 1));
   }
@@ -87,10 +82,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
   void _onMatrixChanged() {
     if (_isAnimatingFocus) return;
     if (_viewport == Size.zero) return;
-    
+
     final matrix = _controller.value;
     final clamped = _clampMatrix(matrix);
-    
+
     if (clamped != matrix) {
       _controller.value = clamped;
     }
@@ -115,14 +110,14 @@ class _MapScreenState extends ConsumerState<MapScreen>
 
   void _animateTo(Matrix4 target, {bool isFocus = false}) {
     final safeTarget = isFocus ? target : _clampMatrix(target);
-    
+
     _isAnimatingFocus = isFocus;
-    
+
     final tween = Matrix4Tween(begin: _controller.value, end: safeTarget);
     final curved = CurvedAnimation(parent: _anim, curve: Curves.easeInOut);
-    
+
     void listener() => _controller.value = tween.evaluate(curved);
-    
+
     _anim
       ..reset()
       ..addListener(listener)
@@ -135,7 +130,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
   void _focusBuilding(MapBuilding b, {bool animate = true}) {
     final targetScale = 2.5.clamp(_fitScale, 6.0);
     final target = _focusMatrix(b.center, targetScale);
-    
+
     if (animate) {
       _animateTo(target, isFocus: true);
     } else {
@@ -151,7 +146,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
 
     for (final b in buildings) {
       bool isHit = false;
-      
+
       if (b.polygon != null && b.polygon!.isNotEmpty) {
         final path = Path()..addPolygon(b.polygon!, true);
         isHit = path.contains(scenePoint);
@@ -217,101 +212,107 @@ class _MapScreenState extends ConsumerState<MapScreen>
       body: buildingsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Не удалось загрузить карту: $e')),
-        data: (buildings) => LayoutBuilder(
-          builder: (context, constraints) {
-            final currentSize = constraints.biggest;
-            
-            if (currentSize.width < 300 || currentSize.height < 300) {
-              return const Center(child: CircularProgressIndicator());
-            }
+        data: (all) {
+          // видимые здания с учётом фильтра (пустой фильтр = все)
+          final buildings = _filters.isEmpty
+              ? all
+              : [for (final b in all) if (_filters.contains(b.category)) b];
 
-            if (_viewport != currentSize) {
-              _viewport = currentSize;
-              _fitScale = _viewport.shortestSide / kMapSize;
-              
-              if (!_isInitialized) {
-                _isInitialized = true;
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (!mounted) return;
-                  final id = widget.focusBuildingId;
-                  final target = buildings.where((b) => b.id == id).firstOrNull;
-                  if (target != null) {
-                    _focusBuilding(target, animate: false);
-                  } else {
-                    _controller.value = _fitMatrix();
-                  }
-                });
+          return LayoutBuilder(
+            builder: (context, constraints) {
+              final currentSize = constraints.biggest;
+
+              if (currentSize.width < 300 || currentSize.height < 300) {
+                return const Center(child: CircularProgressIndicator());
               }
-            }
 
-            return Stack(
-              children: [
-                GestureDetector(
-                  behavior: HitTestBehavior.translucent,
-                  onTapUp: (d) => _handleTap(buildings, d.localPosition),
-                  onPanDown: (_) => _isAnimatingFocus = false,
-                  child: ClipRect(
-                    child: InteractiveViewer(
-                      transformationController: _controller,
-                      constrained: false,
-                      minScale: 0.01,
-                      maxScale: 50.0,
-                      boundaryMargin: const EdgeInsets.all(100000.0),
-                      onInteractionStart: (_) {
-                        _isAnimatingFocus = false;
-                      },
-                      child: SizedBox(
-                        width: kMapSize,
-                        height: kMapSize,
-                        child: Stack(
-                          children: [
-                            ColoredBox(
-                              color: isDarkMode
-                                  ? const Color(0xFF0B132B)
-                                  : const Color(0xFFF8FAFC),
-                              child: SvgPicture.asset(
-                                isDarkMode
-                                    ? 'assets/images/main_map_dark.svg'
-                                    : 'assets/images/main_map_light.svg',
-                                width: kMapSize,
-                                height: kMapSize,
-                                fit: BoxFit.contain,
+              if (_viewport != currentSize) {
+                _viewport = currentSize;
+                _fitScale = _viewport.shortestSide / kMapSize;
+
+                if (!_isInitialized) {
+                  _isInitialized = true;
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (!mounted) return;
+                    final id = widget.focusBuildingId;
+                    final target = all.where((b) => b.id == id).firstOrNull;
+                    if (target != null) {
+                      _focusBuilding(target, animate: false);
+                    } else {
+                      _controller.value = _fitMatrix();
+                    }
+                  });
+                }
+              }
+
+              return Stack(
+                children: [
+                  GestureDetector(
+                    behavior: HitTestBehavior.translucent,
+                    onTapUp: (d) => _handleTap(buildings, d.localPosition),
+                    onPanDown: (_) => _isAnimatingFocus = false,
+                    child: ClipRect(
+                      child: InteractiveViewer(
+                        transformationController: _controller,
+                        constrained: false,
+                        minScale: 0.01,
+                        maxScale: 50.0,
+                        boundaryMargin: const EdgeInsets.all(100000.0),
+                        onInteractionStart: (_) => _isAnimatingFocus = false,
+                        child: SizedBox(
+                          width: kMapSize,
+                          height: kMapSize,
+                          child: Stack(
+                            children: [
+                              ColoredBox(
+                                color: isDarkMode
+                                    ? const Color(0xFF0B132B)
+                                    : const Color(0xFFF8FAFC),
+                                child: SvgPicture.asset(
+                                  isDarkMode
+                                      ? 'assets/images/main_map_dark.svg'
+                                      : 'assets/images/main_map_light.svg',
+                                  width: kMapSize,
+                                  height: kMapSize,
+                                  fit: BoxFit.contain,
+                                ),
                               ),
-                            ),
-                            for (final b in buildings)
-                              if (b.id == _selectedId)
-                                if (b.polygon != null)
-                                  Positioned.fill(
-                                    child: CustomPaint(
-                                      painter: _PolygonHighlightPainter(
-                                        polygon: b.polygon!,
-                                        color: scheme.secondary.withValues(alpha: 0.45),
+                              for (final b in buildings)
+                                if (b.id == _selectedId)
+                                  if (b.polygon != null)
+                                    Positioned.fill(
+                                      child: CustomPaint(
+                                        painter: _PolygonHighlightPainter(
+                                          polygon: b.polygon!,
+                                          color: scheme.secondary
+                                              .withValues(alpha: 0.45),
+                                        ),
                                       ),
-                                    ),
-                                  )
-                                else
-                                  Positioned.fromRect(
-                                    rect: b.rect,
-                                    child: IgnorePointer(
-                                      child: DecoratedBox(
-                                        decoration: BoxDecoration(
-                                          color: scheme.secondary.withValues(alpha: 0.45),
+                                    )
+                                  else
+                                    Positioned.fromRect(
+                                      rect: b.rect,
+                                      child: IgnorePointer(
+                                        child: DecoratedBox(
+                                          decoration: BoxDecoration(
+                                            color: scheme.secondary
+                                                .withValues(alpha: 0.45),
+                                          ),
                                         ),
                                       ),
                                     ),
-                                  ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
-                IgnorePointer(
-                  child: ValueListenableBuilder<Matrix4>(
+                  // Маркеры НЕ в IgnorePointer — они кликабельны.
+                  // Пустые места слоя пропускают жесты к карте.
+                  ValueListenableBuilder<Matrix4>(
                     valueListenable: _controller,
                     builder: (context, matrix, _) {
                       final currentScale = matrix.getMaxScaleOnAxis();
-                      
                       return Stack(
                         clipBehavior: Clip.none,
                         children: [
@@ -328,11 +329,25 @@ class _MapScreenState extends ConsumerState<MapScreen>
                       );
                     },
                   ),
-                ),
-              ],
-            );
-          },
-        ),
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    child: _CategoryFilterBar(
+                      selected: _filters,
+                      onToggle: (c) => setState(() {
+                        _filters.contains(c)
+                            ? _filters.remove(c)
+                            : _filters.add(c);
+                      }),
+                      onClear: () => setState(_filters.clear),
+                    ),
+                  ),
+                ],
+              );
+            },
+          );
+        },
       ),
       floatingActionButton: FloatingActionButton(
         tooltip: 'Показать всю карту',
@@ -352,8 +367,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
   }) {
     final screenPos = MatrixUtils.transformPoint(matrix, b.center);
 
-    if (screenPos.dx < -200 || screenPos.dx > _viewport.width + 200 ||
-        screenPos.dy < -200 || screenPos.dy > _viewport.height + 200) {
+    if (screenPos.dx < -200 ||
+        screenPos.dx > _viewport.width + 200 ||
+        screenPos.dy < -200 ||
+        screenPos.dy > _viewport.height + 200) {
       return const SizedBox.shrink();
     }
 
@@ -364,27 +381,37 @@ class _MapScreenState extends ConsumerState<MapScreen>
       clipBehavior: Clip.none,
       children: [
         Positioned(
-          left: screenPos.dx - 12,
-          top: screenPos.dy - 12,
-          child: Container(
-            width: 24,
-            height: 24,
-            decoration: BoxDecoration(
-              color: isSelected ? scheme.primary : scheme.surface,
-              shape: BoxShape.circle,
-              border: Border.all(color: scheme.primary, width: 2),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x33000000),
-                  blurRadius: 4,
-                  offset: Offset(0, 1),
+          left: screenPos.dx - 22,
+          top: screenPos.dy - 22,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => _onBuildingTap(b), // тап по маркеру → bottom sheet
+            child: SizedBox(
+              width: 44, // увеличенная зона нажатия
+              height: 44,
+              child: Center(
+                child: Container(
+                  width: 24,
+                  height: 24,
+                  decoration: BoxDecoration(
+                    color: isSelected ? scheme.primary : scheme.surface,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: scheme.primary, width: 2),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x33000000),
+                        blurRadius: 4,
+                        offset: Offset(0, 1),
+                      ),
+                    ],
+                  ),
+                  child: Icon(
+                    categoryIcon(b.category),
+                    size: 14,
+                    color: isSelected ? scheme.onPrimary : scheme.primary,
+                  ),
                 ),
-              ],
-            ),
-            child: Icon(
-              categoryIcon(b.category),
-              size: 14,
-              color: isSelected ? scheme.onPrimary : scheme.primary,
+              ),
             ),
           ),
         ),
@@ -392,27 +419,30 @@ class _MapScreenState extends ConsumerState<MapScreen>
           Positioned(
             left: screenPos.dx - 65,
             top: screenPos.dy + 14,
-            child: SizedBox(
-              width: 130,
-              child: Align(
-                alignment: Alignment.topCenter,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: isDarkMode
-                        ? Colors.black.withValues(alpha: 0.65)
-                        : Colors.white.withValues(alpha: 0.85),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    b.name,
-                    textAlign: TextAlign.center,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: isDarkMode ? Colors.white : Colors.black87,
+            child: IgnorePointer(
+              child: SizedBox(
+                width: 130,
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 4, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: isDarkMode
+                          ? Colors.black.withValues(alpha: 0.65)
+                          : Colors.white.withValues(alpha: 0.85),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      b.name,
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: isDarkMode ? Colors.white : Colors.black87,
+                      ),
                     ),
                   ),
                 ),
@@ -420,6 +450,46 @@ class _MapScreenState extends ConsumerState<MapScreen>
             ),
           ),
       ],
+    );
+  }
+}
+
+class _CategoryFilterBar extends StatelessWidget {
+  const _CategoryFilterBar({
+    required this.selected,
+    required this.onToggle,
+    required this.onClear,
+  });
+
+  final Set<BuildingCategory> selected;
+  final ValueChanged<BuildingCategory> onToggle;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 52,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        children: [
+          AppChoiceChip(
+            label: 'Все',
+            selected: selected.isEmpty,
+            onSelected: (_) => onClear(),
+          ),
+          for (final c in BuildingCategory.values)
+            Padding(
+              padding: const EdgeInsets.only(left: 8),
+              child: AppChoiceChip(
+                label: c.label,
+                icon: categoryIcon(c),
+                selected: selected.contains(c),
+                onSelected: (_) => onToggle(c),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }
