@@ -3,8 +3,8 @@ import 'dart:ui';
 
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:salamanca/features/map/models/building_content.dart'; // Новый импорт
 
-/// Категория здания (определяет иконку маркера и подпись в карточке).
 enum BuildingCategory {
   academic('Учебное здание'),
   dorm('Общежитие'),
@@ -21,7 +21,6 @@ enum BuildingCategory {
   }
 }
 
-/// Здание на карте. Координаты — в системе SVG (viewBox 0 0 1500 1500).
 class MapBuilding {
   const MapBuilding({
     required this.id,
@@ -33,6 +32,8 @@ class MapBuilding {
     this.description = '',
     this.address = '',
     this.category = BuildingCategory.service,
+    this.content = const [],       // Новое поле для богатого контента
+    this.polygon,                  // Новое поле для точных хитбоксов
   });
 
   final String id;
@@ -44,6 +45,8 @@ class MapBuilding {
   final double y;
   final double width;
   final double height;
+  final List<ContentBlock> content;
+  final List<Offset>? polygon;
 
   Rect get rect => Rect.fromLTWH(x, y, width, height);
   Offset get center => rect.center;
@@ -58,10 +61,22 @@ class MapBuilding {
         y: (json['y'] as num).toDouble(),
         width: (json['width'] as num).toDouble(),
         height: (json['height'] as num).toDouble(),
+        // Парсим блоки контента
+        content: (json['content'] as List<dynamic>?)
+                ?.map((e) => ContentBlock.tryParse(e as Map<String, dynamic>))
+                .whereType<ContentBlock>()
+                .toList() ??
+            [],
+        // Парсим полигон (если он есть в JSON)
+        polygon: (json['polygon'] as List<dynamic>?)
+            ?.map((p) => Offset(
+                  (p['x'] as num).toDouble(),
+                  (p['y'] as num).toDouble(),
+                ))
+            .toList(),
       );
 }
 
-/// Загружает assets/data/buildings.json один раз.
 final buildingsProvider = FutureProvider<List<MapBuilding>>((ref) async {
   final raw = await rootBundle.loadString('assets/data/buildings.json');
   final list = jsonDecode(raw) as List<dynamic>;

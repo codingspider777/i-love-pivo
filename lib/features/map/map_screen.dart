@@ -2,15 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:salamanca/features/map/models/map_building.dart';
+import 'package:salamanca/features/map/widgets/building_sheet.dart';
 
-/// Размер SVG-карты (должен совпадать с viewBox в main_map_light/dark.svg).
 const double kMapSize = 1500;
-
-/// Подписи маркеров показываются, начиная с этого масштаба.
 const double kLabelsMinScale = 1.4;
-
-/// Запас вокруг здания при попадании тапа (в пикселях экрана),
-/// чтобы узкие здания было проще нажимать.
 const double kHitSlop = 10;
 
 IconData categoryIcon(BuildingCategory c) => switch (c) {
@@ -34,9 +29,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
     with SingleTickerProviderStateMixin {
   final TransformationController _controller = TransformationController();
   late final AnimationController _anim;
+  
   Size _viewport = Size.zero;
+  double _fitScale = 0.5; 
   String? _selectedId;
-  bool _initialized = false;
+  bool _isInitialized = false;
 
   @override
   void initState() {
@@ -46,13 +43,58 @@ class _MapScreenState extends ConsumerState<MapScreen>
       duration: const Duration(milliseconds: 450),
     );
     _selectedId = widget.focusBuildingId;
+    _controller.addListener(_onMatrixChanged);
   }
 
   @override
   void dispose() {
+    _controller.removeListener(_onMatrixChanged);
     _anim.dispose();
     _controller.dispose();
     super.dispose();
+  }
+
+  // Утилита для жесткого ограничения любой матрицы (защита от вылета за края)
+  Matrix4 _clampMatrix(Matrix4 matrix) {
+    if (_viewport == Size.zero) return matrix;
+    
+    final scale = matrix.getMaxScaleOnAxis();
+    final clampedScale = scale.clamp(_fitScale, 6.0);
+    
+    final mapWidth = kMapSize * clampedScale;
+    final mapHeight = kMapSize * clampedScale;
+    
+    double dx = matrix.getTranslation().x;
+    double dy = matrix.getTranslation().y;
+    
+    if (mapWidth <= _viewport.width) {
+      dx = (_viewport.width - mapWidth) / 2;
+    } else {
+      dx = dx.clamp(_viewport.width - mapWidth, 0.0);
+    }
+    
+    if (mapHeight <= _viewport.height) {
+      dy = (_viewport.height - mapHeight) / 2;
+    } else {
+      dy = dy.clamp(_viewport.height - mapHeight, 0.0);
+    }
+    
+    return Matrix4.identity()
+      ..translate(dx, dy)
+      ..scale(clampedScale);
+  }
+
+  // Слушатель контролирует жесты пользователя
+  void _onMatrixChanged() {
+    if (_viewport == Size.zero) return;
+    
+    final matrix = _controller.value;
+    final clamped = _clampMatrix(matrix);
+    
+    // Если матрица вышла за пределы, принудительно возвращаем её
+    if (clamped != matrix) {
+      _controller.value = clamped;
+    }
   }
 
   double get _scale => _controller.value.getMaxScaleOnAxis();
@@ -65,15 +107,20 @@ class _MapScreenState extends ConsumerState<MapScreen>
         .multiplied(Matrix4.diagonal3Values(s, s, 1));
   }
 
+  // Вычисляем матрицу для фокуса на здании. Ограничиваем её сразу, 
+  // чтобы анимация знала точный конечный пункт назначения.
   Matrix4 _focusMatrix(Offset point, double scale) {
     final tx = _viewport.width / 2 - point.dx * scale;
     final ty = _viewport.height / 2 - point.dy * scale;
-    return Matrix4.translationValues(tx, ty, 0)
+    final target = Matrix4.translationValues(tx, ty, 0)
         .multiplied(Matrix4.diagonal3Values(scale, scale, 1));
+        
+    return _clampMatrix(target);
   }
 
   void _animateTo(Matrix4 target) {
-    final tween = Matrix4Tween(begin: _controller.value, end: target);
+    final safeTarget = _clampMatrix(target);
+    final tween = Matrix4Tween(begin: _controller.value, end: safeTarget);
     final curved = CurvedAnimation(parent: _anim, curve: Curves.easeInOut);
     void listener() => _controller.value = tween.evaluate(curved);
     _anim
@@ -91,29 +138,33 @@ class _MapScreenState extends ConsumerState<MapScreen>
     }
   }
 
-  // ---------------------------------------------------------------------
-  // Тап по зданию: toScene + hit-test
-  // ---------------------------------------------------------------------
-
-  /// Находит здание под точкой [scenePoint] (координаты SVG).
-  /// Если подходит несколько — берём то, чей центр ближе к точке.
   MapBuilding? _hitTest(List<MapBuilding> buildings, Offset scenePoint) {
-    final slop = kHitSlop / _scale;
     MapBuilding? best;
     var bestDist = double.infinity;
+
     for (final b in buildings) {
-      if (!b.rect.inflate(slop).contains(scenePoint)) continue;
-      final d = (b.center - scenePoint).distanceSquared;
-      if (d < bestDist) {
-        bestDist = d;
-        best = b;
+      bool isHit = false;
+      
+      if (b.polygon != null && b.polygon!.isNotEmpty) {
+        final path = Path()..addPolygon(b.polygon!, true);
+        isHit = path.contains(scenePoint);
+      } else {
+        final slop = kHitSlop / (_scale == 0 ? 1.0 : _scale);
+        isHit = b.rect.inflate(slop).contains(scenePoint);
+      }
+
+      if (isHit) {
+        final d = (b.center - scenePoint).distanceSquared;
+        if (d < bestDist) {
+          bestDist = d;
+          best = b;
+        }
       }
     }
     return best;
   }
 
   void _handleTap(List<MapBuilding> buildings, Offset viewportPoint) {
-    // Переводим точку из координат вьюпорта в координаты сцены (SVG).
     final scenePoint = _controller.toScene(viewportPoint);
     final hit = _hitTest(buildings, scenePoint);
     if (hit != null) _onBuildingTap(hit);
@@ -122,27 +173,29 @@ class _MapScreenState extends ConsumerState<MapScreen>
   void _onBuildingTap(MapBuilding b) {
     setState(() => _selectedId = b.id);
     _focusBuilding(b);
+
     showModalBottomSheet<void>(
       context: context,
-      showDragHandle: true,
-      builder: (context) => _BuildingSheet(building: b),
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.transparent,
+      builder: (context) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.5,
+          minChildSize: 0.2,
+          maxChildSize: 0.95,
+          expand: false,
+          builder: (context, scrollController) {
+            return BuildingSheet(
+              building: b,
+              controller: scrollController,
+              onClose: () => Navigator.pop(context),
+            );
+          },
+        );
+      },
     ).whenComplete(() {
       if (mounted) setState(() => _selectedId = null);
-    });
-  }
-
-  void _initCamera(List<MapBuilding> buildings) {
-    if (_initialized) return;
-    _initialized = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final id = widget.focusBuildingId;
-      final target = buildings.where((b) => b.id == id).firstOrNull;
-      if (target != null) {
-        _focusBuilding(target, animate: false);
-      } else {
-        _controller.value = _fitMatrix();
-      }
     });
   }
 
@@ -159,66 +212,113 @@ class _MapScreenState extends ConsumerState<MapScreen>
         error: (e, _) => Center(child: Text('Не удалось загрузить карту: $e')),
         data: (buildings) => LayoutBuilder(
           builder: (context, constraints) {
-            _viewport = constraints.biggest;
-            _initCamera(buildings);
-            return GestureDetector(
-              behavior: HitTestBehavior.translucent,
-              onTapUp: (d) => _handleTap(buildings, d.localPosition),
-              child: ClipRect(
-                child: InteractiveViewer(
-                  transformationController: _controller,
-                  constrained: false,
-                  minScale: 0.2,
-                  maxScale: 6,
-                  boundaryMargin: const EdgeInsets.all(200),
-                  child: SizedBox(
-                    width: kMapSize,
-                    height: kMapSize,
-                    child: Stack(
-                      children: [
-                        ColoredBox(
-                          color: isDarkMode
-                              ? const Color(0xFF0B132B)
-                              : const Color(0xFFF8FAFC),
-                          child: SvgPicture.asset(
-                            isDarkMode
-                                ? 'assets/images/main_map_dark.svg'
-                                : 'assets/images/main_map_light.svg',
-                            width: kMapSize,
-                            height: kMapSize,
-                          ),
-                        ),
-                        // Подсветка выбранного здания.
-                        for (final b in buildings)
-                          if (b.id == _selectedId)
-                            Positioned.fromRect(
-                              rect: b.rect,
-                              child: IgnorePointer(
-                                child: DecoratedBox(
-                                  decoration: BoxDecoration(
-                                    color:
-                                        scheme.secondary.withValues(alpha: 0.45),
-                                  ),
-                                ),
+            final currentSize = constraints.biggest;
+            
+            if (currentSize.width < 300 || currentSize.height < 300) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            if (_viewport != currentSize) {
+              _viewport = currentSize;
+              _fitScale = _viewport.shortestSide / kMapSize;
+              
+              if (!_isInitialized) {
+                _isInitialized = true;
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (!mounted) return;
+                  final id = widget.focusBuildingId;
+                  final target = buildings.where((b) => b.id == id).firstOrNull;
+                  if (target != null) {
+                    _controller.value = _focusMatrix(target.center, 2.5);
+                  } else {
+                    _controller.value = _fitMatrix();
+                  }
+                });
+              }
+            }
+
+            return Stack(
+              children: [
+                GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onTapUp: (d) => _handleTap(buildings, d.localPosition),
+                  child: ClipRect(
+                    child: InteractiveViewer(
+                      transformationController: _controller,
+                      constrained: false,
+                      minScale: 0.01,
+                      maxScale: 50.0,
+                      boundaryMargin: const EdgeInsets.all(100000.0),
+                      child: SizedBox(
+                        width: kMapSize,
+                        height: kMapSize,
+                        child: Stack(
+                          children: [
+                            ColoredBox(
+                              color: isDarkMode
+                                  ? const Color(0xFF0B132B)
+                                  : const Color(0xFFF8FAFC),
+                              child: SvgPicture.asset(
+                                isDarkMode
+                                    ? 'assets/images/main_map_dark.svg'
+                                    : 'assets/images/main_map_light.svg',
+                                width: kMapSize,
+                                height: kMapSize,
+                                fit: BoxFit.contain,
                               ),
                             ),
-                        // Маркеры POI (Stack + Positioned).
-                        IgnorePointer(
-                          child: ValueListenableBuilder<Matrix4>(
-                            valueListenable: _controller,
-                            builder: (context, matrix, _) => _PoiLayer(
-                              buildings: buildings,
-                              scale: matrix.getMaxScaleOnAxis(),
-                              selectedId: _selectedId,
-                              isDark: isDarkMode,
-                            ),
-                          ),
+                            for (final b in buildings)
+                              if (b.id == _selectedId)
+                                if (b.polygon != null)
+                                  Positioned.fill(
+                                    child: CustomPaint(
+                                      painter: _PolygonHighlightPainter(
+                                        polygon: b.polygon!,
+                                        color: scheme.secondary.withValues(alpha: 0.45),
+                                      ),
+                                    ),
+                                  )
+                                else
+                                  Positioned.fromRect(
+                                    rect: b.rect,
+                                    child: IgnorePointer(
+                                      child: DecoratedBox(
+                                        decoration: BoxDecoration(
+                                          color: scheme.secondary.withValues(alpha: 0.45),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                          ],
                         ),
-                      ],
+                      ),
                     ),
                   ),
                 ),
-              ),
+                IgnorePointer(
+                  child: ValueListenableBuilder<Matrix4>(
+                    valueListenable: _controller,
+                    builder: (context, matrix, _) {
+                      final currentScale = matrix.getMaxScaleOnAxis();
+                      
+                      return Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          for (final b in buildings)
+                            _buildMarkerOverlay(
+                              context: context,
+                              b: b,
+                              matrix: matrix,
+                              currentScale: currentScale,
+                              isDarkMode: isDarkMode,
+                              scheme: scheme,
+                            ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+              ],
             );
           },
         ),
@@ -230,183 +330,104 @@ class _MapScreenState extends ConsumerState<MapScreen>
       ),
     );
   }
-}
 
-/// Слой маркеров. Маркеры и подписи компенсируют масштаб карты (1 / scale),
-/// поэтому на экране всегда имеют постоянный размер.
-class _PoiLayer extends StatelessWidget {
-  const _PoiLayer({
-    required this.buildings,
-    required this.scale,
-    required this.selectedId,
-    required this.isDark,
-  });
+  Widget _buildMarkerOverlay({
+    required BuildContext context,
+    required MapBuilding b,
+    required Matrix4 matrix,
+    required double currentScale,
+    required bool isDarkMode,
+    required ColorScheme scheme,
+  }) {
+    final screenPos = MatrixUtils.transformPoint(matrix, b.center);
 
-  final List<MapBuilding> buildings;
-  final double scale;
-  final String? selectedId;
-  final bool isDark;
+    if (screenPos.dx < -200 || screenPos.dx > _viewport.width + 200 ||
+        screenPos.dy < -200 || screenPos.dy > _viewport.height + 200) {
+      return const SizedBox.shrink();
+    }
 
-  static const double _markerSize = 24;
+    final isSelected = b.id == _selectedId;
+    final showLabel = currentScale >= kLabelsMinScale || isSelected;
 
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final inv = 1 / scale;
-
-    return SizedBox(
-      width: kMapSize,
-      height: kMapSize,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          for (final b in buildings) ...[
-            // Круглый маркер по центру здания.
-            Positioned(
-              left: b.center.dx,
-              top: b.center.dy,
-              child: FractionalTranslation(
-                translation: const Offset(-0.5, -0.5),
-                child: Transform.scale(
-                  scale: inv,
-                  child: Container(
-                    width: _markerSize,
-                    height: _markerSize,
-                    decoration: BoxDecoration(
-                      color: b.id == selectedId
-                          ? scheme.primary
-                          : scheme.surface,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: scheme.primary, width: 2),
-                      boxShadow: const [
-                        BoxShadow(
-                          color: Color(0x33000000),
-                          blurRadius: 4,
-                          offset: Offset(0, 1),
-                        ),
-                      ],
-                    ),
-                    child: Icon(
-                      categoryIcon(b.category),
-                      size: 14,
-                      color: b.id == selectedId
-                          ? scheme.onPrimary
-                          : scheme.primary,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            // Подпись под маркером: при приближении и для выбранного здания.
-            if (scale >= kLabelsMinScale || b.id == selectedId)
-              Positioned(
-                left: b.center.dx,
-                top: b.center.dy + (_markerSize / 2 + 2) * inv,
-                child: FractionalTranslation(
-                  translation: const Offset(-0.5, 0),
-                  child: Transform.scale(
-                    scale: inv,
-                    alignment: Alignment.topCenter,
-                    child: Container(
-                      constraints: const BoxConstraints(maxWidth: 130),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 4, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: isDark
-                            ? Colors.black.withValues(alpha: 0.65)
-                            : Colors.white.withValues(alpha: 0.85),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        b.name,
-                        textAlign: TextAlign.center,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: isDark ? Colors.white : Colors.black87,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _BuildingSheet extends StatelessWidget {
-  const _BuildingSheet({required this.building});
-
-  final MapBuilding building;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final b = building;
-
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                CircleAvatar(
-                  backgroundColor: scheme.primary.withValues(alpha: 0.12),
-                  child: Icon(categoryIcon(b.category), color: scheme.primary),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(b.name, style: theme.textTheme.titleLarge),
-                      Text(
-                        b.category.label,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Positioned(
+          left: screenPos.dx - 12,
+          top: screenPos.dy - 12,
+          child: Container(
+            width: 24,
+            height: 24,
+            decoration: BoxDecoration(
+              color: isSelected ? scheme.primary : scheme.surface,
+              shape: BoxShape.circle,
+              border: Border.all(color: scheme.primary, width: 2),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x33000000),
+                  blurRadius: 4,
+                  offset: Offset(0, 1),
                 ),
               ],
             ),
-            if (b.address.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(Icons.location_on_outlined,
-                      size: 18, color: scheme.onSurfaceVariant),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child:
-                        Text(b.address, style: theme.textTheme.bodyMedium),
+            child: Icon(
+              categoryIcon(b.category),
+              size: 14,
+              color: isSelected ? scheme.onPrimary : scheme.primary,
+            ),
+          ),
+        ),
+        if (showLabel)
+          Positioned(
+            left: screenPos.dx - 65,
+            top: screenPos.dy + 14,
+            child: SizedBox(
+              width: 130,
+              child: Align(
+                alignment: Alignment.topCenter,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: isDarkMode
+                        ? Colors.black.withValues(alpha: 0.65)
+                        : Colors.white.withValues(alpha: 0.85),
+                    borderRadius: BorderRadius.circular(4),
                   ),
-                ],
-              ),
-            ],
-            const SizedBox(height: 12),
-            Text(
-              b.description.isEmpty
-                  ? 'Описание пока не добавлено'
-                  : b.description,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: scheme.onSurfaceVariant,
+                  child: Text(
+                    b.name,
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: isDarkMode ? Colors.white : Colors.black87,
+                    ),
+                  ),
+                ),
               ),
             ),
-          ],
-        ),
-      ),
+          ),
+      ],
     );
   }
+}
+
+class _PolygonHighlightPainter extends CustomPainter {
+  _PolygonHighlightPainter({required this.polygon, required this.color});
+  final List<Offset> polygon;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+    final path = Path()..addPolygon(polygon, true);
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _PolygonHighlightPainter oldDelegate) =>
+      oldDelegate.color != color || oldDelegate.polygon != polygon;
 }
