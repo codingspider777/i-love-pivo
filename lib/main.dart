@@ -5,8 +5,46 @@ import 'package:go_router/go_router.dart';
 import 'package:salamanca/core/router/app_router.dart';
 import 'package:salamanca/core/theme/app_theme.dart';
 
-void main() {
+void async main() {
   runApp(const ProviderScope(child: MyApp()));
+import 'data/database.dart';
+import 'data/daos/tasks_dao.dart';
+import 'data/repositories/task_repository.dart';
+import 'core/services/notification_service.dart';
+
+// 1. Провайдер для базы данных
+final databaseProvider = Provider<AppDatabase>((ref) {
+  return AppDatabase();
+});
+
+// 2. Провайдер для DAO (берет базу из первого провайдера)
+final tasksDaoProvider = Provider<TasksDao>((ref) {
+  final db = ref.watch(databaseProvider);
+  return db.tasksDao;
+});
+
+// 3. Провайдер для Репозитория (берет DAO из второго провайдера)
+final taskRepositoryProvider = Provider<TaskRepository>((ref) {
+  final dao = ref.watch(tasksDaoProvider);
+  return TaskRepository(dao);
+});
+
+// 4. Провайдер для Сервиса уведомлений
+final notificationServiceProvider = Provider<NotificationService>((ref) {
+  return NotificationService();
+});
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final notificationService = NotificationService();
+  await notificationService.init();
+  await notificationService.requestPermissions();
+  runApp(
+    // Оборачиваем приложение в ProviderScope
+    const ProviderScope(
+      child: MyApp(),
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {
