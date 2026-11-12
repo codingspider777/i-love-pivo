@@ -9,10 +9,10 @@ import 'data/daos/tasks_dao.dart';
 import 'data/repositories/task_repository.dart';
 import 'core/services/notification_service.dart';
 
-// 1. Провайдер для базы данных
-final databaseProvider = Provider<AppDatabase>((ref) {
-  return AppDatabase();
-});
+// 1. Провайдер для базы данных ЗАКОММЕНТИЛ Т.К. ИМПОРТИРУЕТСЯ ИЗ PROVIDERS.DART
+// final databaseProvider = Provider<AppDatabase>((ref) {
+//   return AppDatabase();
+// });
 
 // 2. Провайдер для DAO (берет базу из первого провайдера)
 final tasksDaoProvider = Provider<TasksDao>((ref) {
