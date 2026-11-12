@@ -57,7 +57,7 @@ flutter:
 flutter_launcher_icons:
   android: "launcher_icon"
   ios: true
-  image_path: "assets/icon/app_icon.png"
+  image_path: "assets/icon/daydock_d2_combined.png"
   remove_alpha_ios: true
-  adaptive_icon_background: "assets/icon/app_icon_background.png"
-  adaptive_icon_foreground: "assets/icon/app_icon_foreground.png"
+  adaptive_icon_background: "assets/icon/daydock_d2_background.png"
+  adaptive_icon_foreground: "assets/icon/daydock_d2_foreground.png"
