@@ -28,9 +28,9 @@ import 'data/providers.dart';
 // });
 
 // // 4. Провайдер для Сервиса уведомлений
-// final notificationServiceProvider = Provider<NotificationService>((ref) {
-//   return NotificationService();
-// });
+final notificationServiceProvider = Provider<NotificationService>((ref) {
+  return NotificationService();
+});
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
