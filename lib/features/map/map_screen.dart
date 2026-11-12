@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -8,6 +10,15 @@ import 'package:salamanca/shared/widgets/app_choice_chip.dart';
 const double kMapSize = 1500;
 const double kLabelsMinScale = 1.4;
 const double kHitSlop = 10;
+const double kMaxScale = 8.0;
+
+/// Область, которую реально занимает рисунок карты в SVG (координаты 0..kMapSize).
+/// Минимальный зум = эта область целиком на экране. Если в SVG есть пустые
+/// поля по краям — подгоните прямоугольник под рисунок.
+const Rect kMapContent = Rect.fromLTWH(0, 0, kMapSize, kMapSize);
+
+/// Высота панели фильтров поверх карты (карта «целиком» вписывается под неё).
+const double kTopInset = 52;
 
 class MapScreen extends ConsumerStatefulWidget {
   const MapScreen({super.key, this.focusBuildingId});
@@ -22,12 +33,18 @@ class _MapScreenState extends ConsumerState<MapScreen>
     with SingleTickerProviderStateMixin {
   final TransformationController _controller = TransformationController();
   late final AnimationController _anim;
+  VoidCallback? _animListener;
 
   Size _viewport = Size.zero;
   double _fitScale = 0.5;
   String? _selectedId;
   bool _isInitialized = false;
-  bool _isAnimatingFocus = false;
+
+  // состояние жеста
+  double _startScale = 1;
+  Offset _startScene = Offset.zero;
+  Offset _lastFocal = Offset.zero;
+  Offset _doubleTapPos = Offset.zero;
 
   /// Выбранные категории. Пустой набор = показывать все.
   final Set<BuildingCategory> _filters = {};
@@ -35,118 +52,161 @@ class _MapScreenState extends ConsumerState<MapScreen>
   @override
   void initState() {
     super.initState();
-    _anim = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 450),
-    );
+    _anim = AnimationController(vsync: this);
     _selectedId = widget.focusBuildingId;
-    _controller.addListener(_onMatrixChanged);
   }
 
   @override
   void dispose() {
-    _controller.removeListener(_onMatrixChanged);
     _anim.dispose();
     _controller.dispose();
     super.dispose();
   }
 
-  Matrix4 _clampMatrix(Matrix4 matrix) {
-    if (_viewport == Size.zero) return matrix;
+  double get _scale => _controller.value.storage[0];
 
-    final scale = matrix.getMaxScaleOnAxis();
-    final clampedScale = scale.clamp(_fitScale, 6.0);
+  // ---------- матрицы ----------
 
-    final mapWidth = kMapSize * clampedScale;
-    final mapHeight = kMapSize * clampedScale;
+  /// Ограничивает сдвиг, чтобы карта не уезжала за экран.
+  /// Если карта меньше экрана — центрирует её.
+  Matrix4 _clampMatrix(Matrix4 m) {
+    if (_viewport == Size.zero) return m;
+    final s = m.storage[0];
+    final t = m.getTranslation();
+    final c = kMapContent;
+    final availH = _viewport.height - kTopInset;
 
-    double dx = matrix.getTranslation().x;
-    double dy = matrix.getTranslation().y;
-
-    if (mapWidth <= _viewport.width) {
-      dx = (_viewport.width - mapWidth) / 2;
+    final double dx;
+    if (c.width * s <= _viewport.width) {
+      dx = (_viewport.width - c.width * s) / 2 - c.left * s;
     } else {
-      dx = dx.clamp(_viewport.width - mapWidth, 0.0);
+      dx = t.x.clamp(_viewport.width - c.right * s, -c.left * s).toDouble();
     }
 
-    if (mapHeight <= _viewport.height) {
-      dy = (_viewport.height - mapHeight) / 2;
+    final double dy;
+    if (c.height * s <= availH) {
+      dy = kTopInset + (availH - c.height * s) / 2 - c.top * s;
     } else {
-      dy = dy.clamp(_viewport.height - mapHeight, 0.0);
+      dy = t.y
+          .clamp(_viewport.height - c.bottom * s, kTopInset - c.top * s)
+          .toDouble();
     }
 
-    return Matrix4.translationValues(dx, dy, 0)
-        .multiplied(Matrix4.diagonal3Values(clampedScale, clampedScale, 1));
+    return Matrix4.translationValues(dx, dy, 0)..scale(s, s, 1.0);
   }
 
-  void _onMatrixChanged() {
-    if (_isAnimatingFocus) return;
-    if (_viewport == Size.zero) return;
-
-    final matrix = _controller.value;
-    final clamped = _clampMatrix(matrix);
-
-    if (clamped != matrix) {
-      _controller.value = clamped;
-    }
+  /// Матрица, при которой точка [scene] карты окажется в [screen].
+  Matrix4 _anchored(double scale, Offset scene, Offset screen) {
+    final t = screen - scene * scale;
+    return _clampMatrix(
+        Matrix4.translationValues(t.dx, t.dy, 0)..scale(scale, scale, 1.0));
   }
 
-  double get _scale => _controller.value.getMaxScaleOnAxis();
+  /// Вся карта целиком, по центру.
+  Matrix4 _fitMatrix() =>
+      _clampMatrix(Matrix4.diagonal3Values(_fitScale, _fitScale, 1));
 
-  Matrix4 _fitMatrix() {
-    final s = (_viewport.shortestSide / kMapSize);
-    final dx = (_viewport.width - kMapSize * s) / 2;
-    final dy = (_viewport.height - kMapSize * s) / 2;
-    return Matrix4.translationValues(dx, dy, 0)
-        .multiplied(Matrix4.diagonal3Values(s, s, 1));
-  }
+  Matrix4 _focusMatrix(Offset point, double scale) => _anchored(
+        scale,
+        point,
+        Offset(_viewport.width / 2,
+            kTopInset + (_viewport.height - kTopInset) / 2),
+      );
 
-  Matrix4 _focusMatrix(Offset point, double scale) {
-    final tx = _viewport.width / 2 - point.dx * scale;
-    final ty = _viewport.height / 2 - point.dy * scale;
-    return Matrix4.translationValues(tx, ty, 0)
-        .multiplied(Matrix4.diagonal3Values(scale, scale, 1));
-  }
+  // ---------- анимация ----------
 
-  void _animateTo(Matrix4 target, {bool isFocus = false}) {
-    final safeTarget = isFocus ? target : _clampMatrix(target);
+  void _animateTo(
+    Matrix4 target, {
+    Duration duration = const Duration(milliseconds: 380),
+    Curve curve = Curves.easeOutCubic,
+  }) {
+    _anim.stop();
+    final old = _animListener;
+    if (old != null) _anim.removeListener(old);
 
-    _isAnimatingFocus = isFocus;
-
-    final tween = Matrix4Tween(begin: _controller.value, end: safeTarget);
-    final curved = CurvedAnimation(parent: _anim, curve: Curves.easeInOut);
-
+    final tween = Matrix4Tween(begin: _controller.value, end: target);
+    final curved = CurvedAnimation(parent: _anim, curve: curve);
     void listener() => _controller.value = tween.evaluate(curved);
+    _animListener = listener;
 
-    _anim
-      ..reset()
-      ..addListener(listener)
-      ..forward().whenComplete(() {
-        _anim.removeListener(listener);
-        _isAnimatingFocus = false;
-      });
+    _anim.duration = duration;
+    _anim.addListener(listener);
+    _anim.forward(from: 0);
   }
 
   void _focusBuilding(MapBuilding b, {bool animate = true}) {
-    final targetScale = 2.5.clamp(_fitScale, 6.0);
-    final target = _focusMatrix(b.center, targetScale);
-
+    final s = math.max(_scale, 2.5).clamp(_fitScale, kMaxScale).toDouble();
+    final target = _focusMatrix(b.center, s);
     if (animate) {
-      _animateTo(target, isFocus: true);
+      _animateTo(target);
     } else {
-      _isAnimatingFocus = true;
       _controller.value = target;
-      _isAnimatingFocus = false;
     }
   }
+
+  // ---------- жесты ----------
+
+  void _onScaleStart(ScaleStartDetails d) {
+    _anim.stop();
+    _startScale = _scale;
+    _startScene = _controller.toScene(d.localFocalPoint);
+    _lastFocal = d.localFocalPoint;
+  }
+
+  void _onScaleUpdate(ScaleUpdateDetails d) {
+    _lastFocal = d.localFocalPoint;
+    // «резиновые» пределы: чуть дальше допустимого, потом вернётся
+    final s = (_startScale * d.scale)
+        .clamp(_fitScale * 0.8, kMaxScale * 1.2)
+        .toDouble();
+    _controller.value = _anchored(s, _startScene, d.localFocalPoint);
+  }
+
+  void _onScaleEnd(ScaleEndDetails d) {
+    final s = _scale;
+    final limited = s.clamp(_fitScale, kMaxScale).toDouble();
+
+    if ((s - limited).abs() > 0.001) {
+      // вернуть из «резины» к допустимому масштабу
+      final scene = _controller.toScene(_lastFocal);
+      _animateTo(_anchored(limited, scene, _lastFocal),
+          duration: const Duration(milliseconds: 260));
+      return;
+    }
+
+    // инерция после панорамирования
+    final v = d.velocity.pixelsPerSecond;
+    if (d.pointerCount == 0 && v.distance > 200) {
+      final t = _controller.value.getTranslation();
+      final target = _clampMatrix(
+        Matrix4.translationValues(
+            t.x + v.dx * 0.25, t.y + v.dy * 0.25, 0)
+          ..scale(s, s, 1.0),
+      );
+      _animateTo(target,
+          duration: const Duration(milliseconds: 550),
+          curve: Curves.decelerate);
+    }
+  }
+
+  void _onDoubleTap() {
+    final scene = _controller.toScene(_doubleTapPos);
+    if (_scale > _fitScale * 1.3) {
+      _animateTo(_fitMatrix());
+    } else {
+      final target = math.max(_fitScale * 3, 2.5).clamp(_fitScale, kMaxScale);
+      _animateTo(_anchored(target.toDouble(), scene, _doubleTapPos));
+    }
+  }
+
+  // ---------- тапы по зданиям ----------
 
   MapBuilding? _hitTest(List<MapBuilding> buildings, Offset scenePoint) {
     MapBuilding? best;
     var bestDist = double.infinity;
 
     for (final b in buildings) {
-      bool isHit = false;
-
+      bool isHit;
       if (b.polygon != null && b.polygon!.isNotEmpty) {
         final path = Path()..addPolygon(b.polygon!, true);
         isHit = path.contains(scenePoint);
@@ -167,8 +227,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
   }
 
   void _handleTap(List<MapBuilding> buildings, Offset viewportPoint) {
-    final scenePoint = _controller.toScene(viewportPoint);
-    final hit = _hitTest(buildings, scenePoint);
+    final hit = _hitTest(buildings, _controller.toScene(viewportPoint));
     if (hit != null) _onBuildingTap(hit);
   }
 
@@ -201,6 +260,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
     });
   }
 
+  // ---------- build ----------
+
   @override
   Widget build(BuildContext context) {
     final buildingsAsync = ref.watch(buildingsProvider);
@@ -213,7 +274,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Не удалось загрузить карту: $e')),
         data: (all) {
-          // видимые здания с учётом фильтра (пустой фильтр = все)
           final buildings = _filters.isEmpty
               ? all
               : [for (final b in all) if (_filters.contains(b.category)) b];
@@ -228,12 +288,15 @@ class _MapScreenState extends ConsumerState<MapScreen>
 
               if (_viewport != currentSize) {
                 _viewport = currentSize;
-                _fitScale = _viewport.shortestSide / kMapSize;
+                _fitScale = math.min(
+                  _viewport.width / kMapContent.width,
+                  (_viewport.height - kTopInset) / kMapContent.height,
+                );
 
-                if (!_isInitialized) {
-                  _isInitialized = true;
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (!mounted) return;
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (!mounted) return;
+                  if (!_isInitialized) {
+                    _isInitialized = true;
                     final id = widget.focusBuildingId;
                     final target = all.where((b) => b.id == id).firstOrNull;
                     if (target != null) {
@@ -241,78 +304,103 @@ class _MapScreenState extends ConsumerState<MapScreen>
                     } else {
                       _controller.value = _fitMatrix();
                     }
-                  });
-                }
+                  } else {
+                    // поворот экрана и т.п.
+                    _controller.value = _scale < _fitScale
+                        ? _fitMatrix()
+                        : _clampMatrix(_controller.value);
+                  }
+                });
               }
 
               return Stack(
                 children: [
                   GestureDetector(
-                    behavior: HitTestBehavior.translucent,
-                    onTapUp: (d) => _handleTap(buildings, d.localPosition),
-                    onPanDown: (_) => _isAnimatingFocus = false,
-                    child: ClipRect(
-                      child: InteractiveViewer(
-                        transformationController: _controller,
-                        constrained: false,
-                        minScale: 0.01,
-                        maxScale: 50.0,
-                        boundaryMargin: const EdgeInsets.all(100000.0),
-                        onInteractionStart: (_) => _isAnimatingFocus = false,
-                        child: SizedBox(
-                          width: kMapSize,
-                          height: kMapSize,
+                      behavior: HitTestBehavior.opaque,
+                      onScaleStart: _onScaleStart,
+                      onScaleUpdate: _onScaleUpdate,
+                      onScaleEnd: _onScaleEnd,
+                      onTapUp: (d) => _handleTap(buildings, d.localPosition),
+                      onDoubleTapDown: (d) => _doubleTapPos = d.localPosition,
+                      onDoubleTap: _onDoubleTap,
+                      child: ClipRect(
+                        child: SizedBox.expand(
                           child: Stack(
                             children: [
-                              ColoredBox(
-                                color: isDarkMode
-                                    ? const Color(0xFF0B132B)
-                                    : const Color(0xFFF8FAFC),
-                                child: SvgPicture.asset(
-                                  isDarkMode
-                                      ? 'assets/images/main_map_dark.svg'
-                                      : 'assets/images/main_map_light.svg',
-                                  width: kMapSize,
-                                  height: kMapSize,
-                                  fit: BoxFit.contain,
-                                ),
-                              ),
-                              for (final b in buildings)
-                                if (b.id == _selectedId)
-                                  if (b.polygon != null)
-                                    Positioned.fill(
-                                      child: CustomPaint(
-                                        painter: _PolygonHighlightPainter(
-                                          polygon: b.polygon!,
-                                          color: scheme.secondary
-                                              .withValues(alpha: 0.45),
-                                        ),
-                                      ),
-                                    )
-                                  else
-                                    Positioned.fromRect(
-                                      rect: b.rect,
-                                      child: IgnorePointer(
-                                        child: DecoratedBox(
-                                          decoration: BoxDecoration(
-                                            color: scheme.secondary
-                                                .withValues(alpha: 0.45),
+                              Positioned(
+                                left: 0,
+                                top: 0,
+                                width: kMapSize,
+                                height: kMapSize,
+                                child: ValueListenableBuilder<Matrix4>(
+                                  valueListenable: _controller,
+                                  builder: (context, matrix, child) =>
+                                      Transform(
+                                    transform: matrix,
+                                    alignment: Alignment.topLeft,
+                                    child: child,
+                                  ),
+                                  child: SizedBox(
+                                    width: kMapSize,
+                                    height: kMapSize,
+                                    child: Stack(
+                                      children: [
+                                        ColoredBox(
+                                          color: isDarkMode
+                                              ? const Color(0xFF0B132B)
+                                              : const Color(0xFFF8FAFC),
+                                          child: SvgPicture.asset(
+                                            isDarkMode
+                                                ? 'assets/images/main_map_dark.svg'
+                                                : 'assets/images/main_map_light.svg',
+                                            width: kMapSize,
+                                            height: kMapSize,
+                                            fit: BoxFit.contain,
                                           ),
                                         ),
-                                      ),
+                                        for (final b in buildings)
+                                          if (b.id == _selectedId)
+                                            if (b.polygon != null)
+                                              Positioned.fill(
+                                                child: IgnorePointer(
+                                                  child: CustomPaint(
+                                                    painter:
+                                                        _PolygonHighlightPainter(
+                                                      polygon: b.polygon!,
+                                                      color: scheme.secondary
+                                                          .withValues(
+                                                              alpha: 0.45),
+                                                    ),
+                                                  ),
+                                                ),
+                                              )
+                                            else
+                                              Positioned.fromRect(
+                                                rect: b.rect,
+                                                child: IgnorePointer(
+                                                  child: DecoratedBox(
+                                                    decoration: BoxDecoration(
+                                                      color: scheme.secondary
+                                                          .withValues(
+                                                              alpha: 0.45),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                      ],
                                     ),
+                                  ),
+                                ),
+                              ),
                             ],
                           ),
                         ),
                       ),
-                    ),
                   ),
-                  // Маркеры НЕ в IgnorePointer — они кликабельны.
-                  // Пустые места слоя пропускают жесты к карте.
                   ValueListenableBuilder<Matrix4>(
                     valueListenable: _controller,
                     builder: (context, matrix, _) {
-                      final currentScale = matrix.getMaxScaleOnAxis();
+                      final currentScale = matrix.storage[0];
                       return Stack(
                         clipBehavior: Clip.none,
                         children: [
@@ -385,9 +473,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
           top: screenPos.dy - 22,
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onTap: () => _onBuildingTap(b), // тап по маркеру → bottom sheet
+            onTap: () => _onBuildingTap(b),
             child: SizedBox(
-              width: 44, // увеличенная зона нажатия
+              width: 44,
               height: 44,
               child: Center(
                 child: Container(
