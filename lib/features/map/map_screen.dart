@@ -15,16 +15,10 @@ const double kLabelsMinScale = 1.4;
 const double kHitSlop = 10;
 const double kMaxScale = 8.0;
 
-/// Область, которую реально занимает рисунок карты в SVG (координаты 0..kMapSize).
-/// Минимальный зум = эта область целиком на экране. Если в SVG есть пустые
-/// поля по краям — подгоните прямоугольник под рисунок.
 const Rect kMapContent = Rect.fromLTWH(0, 0, kMapSize, kMapSize);
 
-/// Высота панели фильтров поверх карты (карта «целиком» вписывается под неё).
 const double kTopInset = 52;
 
-/// Контуры зданий из SVG: элемент с id == id здания (path/polygon/rect или группа).
-/// Координаты приводятся к системе карты (0..kMapSize).
 final buildingShapesProvider = FutureProvider<Map<String, Path>>((ref) async {
   try {
     final raw =
@@ -136,13 +130,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
   Map<String, Path> _shapes = const {};
   bool _isInitialized = false;
 
-  // состояние жеста
   double _startScale = 1;
   Offset _startScene = Offset.zero;
   Offset _lastFocal = Offset.zero;
   Offset _doubleTapPos = Offset.zero;
 
-  /// Выбранные категории. Пустой набор = показывать все.
   final Set<BuildingCategory> _filters = {};
 
   @override
@@ -161,10 +153,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
 
   double get _scale => _controller.value.storage[0];
 
-  // ---------- матрицы ----------
-
-  /// Ограничивает сдвиг, чтобы карта не уезжала за экран.
-  /// Если карта меньше экрана — центрирует её.
   Matrix4 _clampMatrix(Matrix4 m) {
     if (_viewport == Size.zero) return m;
     final s = m.storage[0];
@@ -188,21 +176,17 @@ class _MapScreenState extends ConsumerState<MapScreen>
           .toDouble();
     }
 
-    // ИСПРАВЛЕНО: Замена ..scale() на multiplied
     return Matrix4.translationValues(dx, dy, 0)
         .multiplied(Matrix4.diagonal3Values(s, s, 1.0));
   }
 
-  /// Матрица, при которой точка [scene] карты окажется в [screen].
   Matrix4 _anchored(double scale, Offset scene, Offset screen) {
     final t = screen - scene * scale;
-    // ИСПРАВЛЕНО: Замена ..scale() на multiplied
     return _clampMatrix(
         Matrix4.translationValues(t.dx, t.dy, 0)
             .multiplied(Matrix4.diagonal3Values(scale, scale, 1.0)));
   }
 
-  /// Вся карта целиком, по центру.
   Matrix4 _fitMatrix() =>
       _clampMatrix(Matrix4.diagonal3Values(_fitScale, _fitScale, 1));
 
@@ -212,8 +196,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
         Offset(_viewport.width / 2,
             kTopInset + (_viewport.height - kTopInset) / 2),
       );
-
-  // ---------- анимация ----------
 
   void _animateTo(
     Matrix4 target, {
@@ -244,8 +226,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
     }
   }
 
-  // ---------- жесты ----------
-
   void _onScaleStart(ScaleStartDetails d) {
     _anim.stop();
     _startScale = _scale;
@@ -255,7 +235,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
 
   void _onScaleUpdate(ScaleUpdateDetails d) {
     _lastFocal = d.localFocalPoint;
-    // «резиновые» пределы: чуть дальше допустимого, потом вернётся
     final s = (_startScale * d.scale)
         .clamp(_fitScale * 0.8, kMaxScale * 1.2)
         .toDouble();
@@ -267,19 +246,16 @@ class _MapScreenState extends ConsumerState<MapScreen>
     final limited = s.clamp(_fitScale, kMaxScale).toDouble();
 
     if ((s - limited).abs() > 0.001) {
-      // вернуть из «резины» к допустимому масштабу
       final scene = _controller.toScene(_lastFocal);
       _animateTo(_anchored(limited, scene, _lastFocal),
           duration: const Duration(milliseconds: 260));
       return;
     }
 
-    // инерция после панорамирования
     final v = d.velocity.pixelsPerSecond;
     if (d.pointerCount == 0 && v.distance > 200) {
       final t = _controller.value.getTranslation();
       
-      // ИСПРАВЛЕНО: Замена ..scale() на multiplied
       final target = _clampMatrix(
         Matrix4.translationValues(
                 t.x + v.dx * 0.25, t.y + v.dy * 0.25, 0)
@@ -302,9 +278,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
     }
   }
 
-  // ---------- тапы по зданиям ----------
-
-  /// Точный контур: polygon из JSON, иначе контур из SVG по id.
   Path? _exactShape(MapBuilding b) {
     final poly = b.polygon;
     if (poly != null && poly.isNotEmpty) {
@@ -313,7 +286,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
     return _shapes[b.id];
   }
 
-  /// Контур для подсветки (запасной вариант — прямоугольник).
   Path _highlightShape(MapBuilding b) =>
       _exactShape(b) ?? (Path()..addRect(b.rect));
 
@@ -342,7 +314,27 @@ class _MapScreenState extends ConsumerState<MapScreen>
     return best;
   }
 
+  // ОБНОВЛЕНО: Теперь клик проверяет и маркеры, и контуры зданий
   void _handleTap(List<MapBuilding> buildings, Offset viewportPoint) {
+    // 1. Проверяем попадание в маркеры (они фиксированного размера на экране)
+    MapBuilding? bestMarker;
+    var bestDist = 24.0; // Радиус нажатия на маркер
+
+    for (final b in buildings) {
+      final markerScreenPos = MatrixUtils.transformPoint(_controller.value, b.center);
+      final dist = (markerScreenPos - viewportPoint).distance;
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestMarker = b;
+      }
+    }
+
+    if (bestMarker != null) {
+      _onBuildingTap(bestMarker);
+      return;
+    }
+
+    // 2. Если не попали в маркер, проверяем контуры зданий
     final hit = _hitTest(buildings, _controller.toScene(viewportPoint));
     if (hit != null) _onBuildingTap(hit);
   }
@@ -375,8 +367,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
       if (mounted) setState(() => _selectedId = null);
     });
   }
-
-  // ---------- build ----------
 
   @override
   Widget build(BuildContext context) {
@@ -422,7 +412,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
                       _controller.value = _fitMatrix();
                     }
                   } else {
-                    // поворот экрана и т.п.
                     _controller.value = _scale < _fitScale
                         ? _fitMatrix()
                         : _clampMatrix(_controller.value);
@@ -500,25 +489,29 @@ class _MapScreenState extends ConsumerState<MapScreen>
                         ),
                       ),
                   ),
-                  ValueListenableBuilder<Matrix4>(
-                    valueListenable: _controller,
-                    builder: (context, matrix, _) {
-                      final currentScale = matrix.storage[0];
-                      return Stack(
-                        clipBehavior: Clip.none,
-                        children: [
-                          for (final b in buildings)
-                            _buildMarkerOverlay(
-                              context: context,
-                              b: b,
-                              matrix: matrix,
-                              currentScale: currentScale,
-                              isDarkMode: isDarkMode,
-                              scheme: scheme,
-                            ),
-                        ],
-                      );
-                    },
+                  
+                  // ИСПРАВЛЕНО: Обернуто в IgnorePointer, чтобы маркеры не перехватывали зум
+                  IgnorePointer(
+                    child: ValueListenableBuilder<Matrix4>(
+                      valueListenable: _controller,
+                      builder: (context, matrix, _) {
+                        final currentScale = matrix.storage[0];
+                        return Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            for (final b in buildings)
+                              _buildMarkerOverlay(
+                                context: context,
+                                b: b,
+                                matrix: matrix,
+                                currentScale: currentScale,
+                                isDarkMode: isDarkMode,
+                                scheme: scheme,
+                              ),
+                          ],
+                        );
+                      },
+                    ),
                   ),
                   Positioned(
                     top: 0,
@@ -574,33 +567,30 @@ class _MapScreenState extends ConsumerState<MapScreen>
         Positioned(
           left: screenPos.dx - 22,
           top: screenPos.dy - 22,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () => _onBuildingTap(b),
-            child: SizedBox(
-              width: 44,
-              height: 44,
-              child: Center(
-                child: Container(
-                  width: 24,
-                  height: 24,
-                  decoration: BoxDecoration(
-                    color: isSelected ? scheme.primary : scheme.surface,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: scheme.primary, width: 2),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Color(0x33000000),
-                        blurRadius: 4,
-                        offset: Offset(0, 1),
-                      ),
-                    ],
-                  ),
-                  child: Icon(
-                    categoryIcon(b.category),
-                    size: 14,
-                    color: isSelected ? scheme.onPrimary : scheme.primary,
-                  ),
+          // ИСПРАВЛЕНО: Убран GestureDetector, оставлен только визуальный вид
+          child: SizedBox(
+            width: 44,
+            height: 44,
+            child: Center(
+              child: Container(
+                width: 24,
+                height: 24,
+                decoration: BoxDecoration(
+                  color: isSelected ? scheme.primary : scheme.surface,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: scheme.primary, width: 2),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x33000000),
+                      blurRadius: 4,
+                      offset: Offset(0, 1),
+                    ),
+                  ],
+                ),
+                child: Icon(
+                  categoryIcon(b.category),
+                  size: 14,
+                  color: isSelected ? scheme.onPrimary : scheme.primary,
                 ),
               ),
             ),
