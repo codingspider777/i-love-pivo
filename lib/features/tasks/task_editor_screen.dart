@@ -4,9 +4,10 @@ import 'package:go_router/go_router.dart';
 import 'package:salamanca/core/utils/date_utils.dart';
 import 'package:salamanca/data/models/task.dart';
 import 'package:salamanca/features/tasks/providers/tasks_provider.dart';
+import 'package:salamanca/features/tasks/widgets/priority_chips.dart';
+import 'package:salamanca/shared/widgets/custom_text_field.dart';
 
 /// Редактор задачи. Если [taskId] задан — редактирование, иначе создание.
-/// (Привязка к карте будет добавлена отдельной задачей.)
 class TaskEditorScreen extends ConsumerStatefulWidget {
   const TaskEditorScreen({super.key, this.taskId, this.initialDate});
 
@@ -21,11 +22,14 @@ class _TaskEditorScreenState extends ConsumerState<TaskEditorScreen> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _titleCtrl;
   late final TextEditingController _descCtrl;
+  final _dateCtrl = TextEditingController();
+  final _timeCtrl = TextEditingController();
 
   Task? _existing;
   late DateTime _date;
   TimeOfDay? _time;
   TaskPriority _priority = TaskPriority.medium;
+  bool _formatted = false;
 
   bool get _isEditing => widget.taskId != null;
 
@@ -33,10 +37,9 @@ class _TaskEditorScreenState extends ConsumerState<TaskEditorScreen> {
   void initState() {
     super.initState();
     if (_isEditing) {
-      _existing = ref
-          .read(tasksProvider)
-          .where((t) => t.id == widget.taskId)
-          .firstOrNull;
+      final id = int.tryParse(widget.taskId!);
+      _existing =
+          ref.read(tasksProvider).where((t) => t.id == id).firstOrNull;
     }
     final task = _existing;
     _titleCtrl = TextEditingController(text: task?.title);
@@ -47,11 +50,29 @@ class _TaskEditorScreenState extends ConsumerState<TaskEditorScreen> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // локаль и TimeOfDay.format требуют context — в initState нельзя
+    if (!_formatted) {
+      _formatted = true;
+      _syncDate();
+      _syncTime();
+    }
+  }
+
+  @override
   void dispose() {
     _titleCtrl.dispose();
     _descCtrl.dispose();
+    _dateCtrl.dispose();
+    _timeCtrl.dispose();
     super.dispose();
   }
+
+  void _syncDate() => _dateCtrl.text =
+      formatLongDate(_date, Localizations.localeOf(context).toString());
+
+  void _syncTime() => _timeCtrl.text = _time?.format(context) ?? '';
 
   Future<void> _pickDate() async {
     final picked = await showDatePicker(
@@ -60,7 +81,11 @@ class _TaskEditorScreenState extends ConsumerState<TaskEditorScreen> {
       firstDate: kFirstDay,
       lastDate: kLastDay,
     );
-    if (picked != null) setState(() => _date = dateOnly(picked));
+    if (picked != null) {
+      _date = dateOnly(picked);
+      _syncDate();
+      setState(() {});
+    }
   }
 
   Future<void> _pickTime() async {
@@ -68,19 +93,23 @@ class _TaskEditorScreenState extends ConsumerState<TaskEditorScreen> {
       context: context,
       initialTime: _time ?? TimeOfDay.now(),
     );
-    if (picked != null) setState(() => _time = picked);
+    if (picked != null) {
+      _time = picked;
+      _syncTime();
+      setState(() {});
+    }
   }
 
-  void _save() {
+  Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final notifier = ref.read(tasksProvider.notifier);
+    final actions = ref.read(tasksActionsProvider);
     final title = _titleCtrl.text.trim();
     final description = _descCtrl.text.trim();
     final existing = _existing;
 
     if (existing != null) {
-      notifier.updateTask(existing.copyWith(
+      await actions.update(existing.copyWith(
         title: title,
         description: description,
         date: _date,
@@ -89,8 +118,8 @@ class _TaskEditorScreenState extends ConsumerState<TaskEditorScreen> {
         priority: _priority,
       ));
     } else {
-      notifier.addTask(Task(
-        id: DateTime.now().microsecondsSinceEpoch.toString(),
+      await actions.add(Task(
+        id: 0,
         title: title,
         description: description,
         date: _date,
@@ -98,7 +127,7 @@ class _TaskEditorScreenState extends ConsumerState<TaskEditorScreen> {
         priority: _priority,
       ));
     }
-    context.pop();
+    if (mounted) context.pop();
   }
 
   Future<void> _delete() async {
@@ -120,12 +149,12 @@ class _TaskEditorScreenState extends ConsumerState<TaskEditorScreen> {
       ),
     );
     if (confirmed == true && mounted) {
-      ref.read(tasksProvider.notifier).removeTask(widget.taskId!);
-      context.pop();
+      await ref.read(tasksActionsProvider).remove(_existing!.id);
+      if (mounted) context.pop();
     }
   }
 
-  String? _validateDate() {
+  String? _validateDate(String? _) {
     // Для новых задач нельзя выбирать прошедшую дату.
     if (!_isEditing && _date.isBefore(dateOnly(DateTime.now()))) {
       return 'Дата не может быть в прошлом';
@@ -133,13 +162,12 @@ class _TaskEditorScreenState extends ConsumerState<TaskEditorScreen> {
     return null;
   }
 
-  String? _validateTime() {
+  String? _validateTime(String? _) {
     final time = _time;
     if (time == null || _isEditing) return null;
     final now = DateTime.now();
     final isToday = _date == dateOnly(now);
-    final timeMinutes = time.hour * 60 + time.minute;
-    if (isToday && timeMinutes < now.hour * 60 + now.minute) {
+    if (isToday && time.hour * 60 + time.minute < now.hour * 60 + now.minute) {
       return 'Это время уже прошло';
     }
     return null;
@@ -155,10 +183,15 @@ class _TaskEditorScreenState extends ConsumerState<TaskEditorScreen> {
     }
 
     final theme = Theme.of(context);
-    final locale = Localizations.localeOf(context).toString();
 
     return Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          tooltip: 'Назад',
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+          onPressed: () => context.pop(),
+        ),
+        titleSpacing: 0,
         title: Text(_isEditing ? 'Редактирование' : 'Новая задача'),
         actions: [
           if (_isEditing)
@@ -173,19 +206,16 @@ class _TaskEditorScreenState extends ConsumerState<TaskEditorScreen> {
         padding: const EdgeInsets.all(16),
         child: Form(
           key: _formKey,
-          autovalidateMode: AutovalidateMode.onUserInteraction,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              TextFormField(
+              CustomTextField(
                 controller: _titleCtrl,
+                label: 'Название *',
+                hint: 'Например: сдать лабораторную',
+                maxLength: 100,
                 textInputAction: TextInputAction.next,
                 textCapitalization: TextCapitalization.sentences,
-                maxLength: 100,
-                decoration: const InputDecoration(
-                  labelText: 'Название *',
-                  hintText: 'Например: сдать лабораторную',
-                ),
                 validator: (value) {
                   final text = value?.trim() ?? '';
                   if (text.isEmpty) return 'Введите название задачи';
@@ -193,72 +223,68 @@ class _TaskEditorScreenState extends ConsumerState<TaskEditorScreen> {
                   return null;
                 },
               ),
-              const SizedBox(height: 12),
-              TextFormField(
+              const SizedBox(height: 16),
+              CustomTextField(
                 controller: _descCtrl,
-                textCapitalization: TextCapitalization.sentences,
+                label: 'Описание',
+                maxLength: 500,
                 minLines: 3,
                 maxLines: 5,
-                maxLength: 500,
-                decoration: const InputDecoration(
-                  labelText: 'Описание',
-                  alignLabelWithHint: true,
-                ),
-              ),
-              const SizedBox(height: 12),
-              // key меняется вместе со значением, чтобы поле обновило текст.
-              TextFormField(
-                key: ValueKey('date-${dateToParam(_date)}'),
-                initialValue: formatLongDate(_date, locale),
-                readOnly: true,
-                onTap: _pickDate,
-                decoration: const InputDecoration(
-                  labelText: 'Дата *',
-                  prefixIcon: Icon(Icons.event),
-                ),
-                validator: (_) => _validateDate(),
+                textCapitalization: TextCapitalization.sentences,
               ),
               const SizedBox(height: 16),
-              TextFormField(
-                key: ValueKey('time-${_time?.hour}-${_time?.minute}'),
-                initialValue: _time?.format(context) ?? '',
+              CustomTextField(
+                controller: _dateCtrl,
+                label: 'Дата *',
+                readOnly: true,
+                onTap: _pickDate,
+                prefixIcon: const Icon(Icons.event),
+                validator: _validateDate,
+              ),
+              const SizedBox(height: 16),
+              CustomTextField(
+                controller: _timeCtrl,
+                label: 'Время (необязательно)',
+                hint: 'Не задано',
                 readOnly: true,
                 onTap: _pickTime,
-                decoration: InputDecoration(
-                  labelText: 'Время (необязательно)',
-                  prefixIcon: const Icon(Icons.schedule),
-                  suffixIcon: _time == null
-                      ? null
-                      : IconButton(
-                    tooltip: 'Убрать время',
-                    icon: const Icon(Icons.close),
-                    onPressed: () => setState(() => _time = null),
-                  ),
-                ),
-                validator: (_) => _validateTime(),
+                prefixIcon: const Icon(Icons.schedule),
+                suffixIcon: _time == null
+                    ? null
+                    : IconButton(
+                        tooltip: 'Убрать время',
+                        icon: const Icon(Icons.close),
+                        onPressed: () {
+                          _time = null;
+                          _syncTime();
+                          setState(() {});
+                        },
+                      ),
+                validator: _validateTime,
               ),
               const SizedBox(height: 20),
-              Text('Приоритет', style: theme.textTheme.titleSmall),
-              const SizedBox(height: 8),
-              SizedBox(
-                width: double.infinity,
-                child: SegmentedButton<TaskPriority>(
-                  showSelectedIcon: false,
-                  segments: [
-                    for (final p in TaskPriority.values)
-                      ButtonSegment(value: p, label: Text(p.label)),
-                  ],
-                  selected: {_priority},
-                  onSelectionChanged: (s) =>
-                      setState(() => _priority = s.first),
+              Padding(
+                padding: const EdgeInsets.only(left: 4, bottom: 8),
+                child: Text(
+                  'Приоритет',
+                  style: theme.textTheme.labelMedium
+                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                 ),
               ),
-              const SizedBox(height: 28),
-              FilledButton(
-                onPressed: _save,
-                child: const Text('Сохранить'),
+              PriorityChips(
+                value: _priority,
+                onChanged: (p) => setState(() => _priority = p),
               ),
             ],
+          ),
+        ),
+      ),
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+          child: FilledButton(
+            onPressed: _save,
+            child: const Text('Сохранить'),
           ),
         ),
       ),

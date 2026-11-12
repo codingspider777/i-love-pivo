@@ -4,27 +4,28 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:salamanca/core/router/app_router.dart';
 import 'package:salamanca/core/theme/app_theme.dart';
-import 'data/database.dart';
-import 'data/daos/tasks_dao.dart';
-import 'data/repositories/task_repository.dart';
+// import 'data/database.dart';
+// import 'data/daos/tasks_dao.dart';
+// import 'data/repositories/task_repository.dart';
 import 'core/services/notification_service.dart';
+// import 'data/providers.dart';
 
-// 1. Провайдер для базы данных
-final databaseProvider = Provider<AppDatabase>((ref) {
-  return AppDatabase();
-});
+// 1. Провайдер для базы данных ЗАКОММЕНТИЛ Т.К. ИМПОРТИРУЕТСЯ ИЗ PROVIDERS.DART
+// final databaseProvider = Provider<AppDatabase>((ref) {
+//   return AppDatabase();
+// });
 
 // 2. Провайдер для DAO (берет базу из первого провайдера)
-final tasksDaoProvider = Provider<TasksDao>((ref) {
-  final db = ref.watch(databaseProvider);
-  return db.tasksDao;
-});
+// final tasksDaoProvider = Provider<TasksDao>((ref) {
+//   final db = ref.watch(databaseProvider);
+//   return db.tasksDao;
+// });
 
 // 3. Провайдер для Репозитория (берет DAO из второго провайдера)
-final taskRepositoryProvider = Provider<TaskRepository>((ref) {
-  final dao = ref.watch(tasksDaoProvider);
-  return TaskRepository(dao);
-});
+// final taskRepositoryProvider = Provider<TaskRepository>((ref) {
+//   final dao = ref.watch(tasksDaoProvider);
+//   return TaskRepository(dao);
+// });
 
 // 4. Провайдер для Сервиса уведомлений
 final notificationServiceProvider = Provider<NotificationService>((ref) {
@@ -47,8 +48,6 @@ void main() async {
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // Создаем роутер один раз. 
-  // Никаких extraRoutes и MapTestScreen тут быть не должно!
   static final GoRouter _router = createAppRouter();
 
   @override
@@ -57,6 +56,8 @@ class MyApp extends StatelessWidget {
       title: 'Salamanca',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
+      darkTheme: AppTheme.dark,
+      themeMode: ThemeMode.system, // следует за темой телефона
       routerConfig: _router,
       locale: const Locale('ru'),
       supportedLocales: const [Locale('ru'), Locale('en')],

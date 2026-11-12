@@ -1,39 +1,19 @@
 import '../daos/tasks_dao.dart';
-import '../database.dart'; // Для типов Task и TasksCompanion
+import '../database.dart';
 
 class TaskRepository {
   final TasksDao _tasksDao;
 
-  // Внедряем зависимость через конструктор
   TaskRepository(this._tasksDao);
 
-  // 1. Создать задачу
-  Future<int> addTask(TasksCompanion task) {
-    return _tasksDao.insertTask(task);
-  }
-
-  // 2. Получить все задачи (один раз)
-  Future<List<Task>> getAllTasks() {
-    return _tasksDao.getAllTasks();
-  }
-
-  // 3. Получить задачи в реальном времени (для UI)
-  Stream<List<Task>> watchAllTasks() {
-    return _tasksDao.watchAllTasks();
-  }
-
-  // 4. Обновить задачу
-  Future<bool> updateTask(Task task) {
-    return _tasksDao.updateTask(task);
-  }
-
-  // 5. Удалить задачу
-  Future<int> deleteTask(int id) {
-    return _tasksDao.deleteTask(id);
-  }
-  
-  // 6. Получить одну задачу (например, для редактора)
-  Future<Task?> getTaskById(int id) {
-    return _tasksDao.getTaskById(id);
-  }
+  Future<int> addTask(TasksCompanion task) => _tasksDao.insertTask(task);
+  Future<List<TaskRow>> getAllTasks() => _tasksDao.getAllTasks();
+  Stream<List<TaskRow>> watchAllTasks() => _tasksDao.watchAllTasks();
+  Future<bool> updateTask(TaskRow task) => _tasksDao.updateTask(task);
+  Future<int> updateTaskById(int id, TasksCompanion data) =>
+      _tasksDao.updateTaskById(id, data);
+  Future<int> setCompleted(int id, bool value) =>
+      _tasksDao.setCompleted(id, value);
+  Future<int> deleteTask(int id) => _tasksDao.deleteTask(id);
+  Future<TaskRow?> getTaskById(int id) => _tasksDao.getTaskById(id);
 }
