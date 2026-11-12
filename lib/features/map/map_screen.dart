@@ -47,7 +47,6 @@ Map<String, Path> _parseShapes(String raw) {
   }
   final k = math.min(kMapSize / vw, kMapSize / vh);
   
-  // ИСПРАВЛЕНО: Замена устаревших ..translate() и ..scale() на безопасные методы
   final m = Matrix4.translationValues((kMapSize - vw * k) / 2, (kMapSize - vh * k) / 2, 0)
       .multiplied(Matrix4.diagonal3Values(k, k, 1.0))
       .multiplied(Matrix4.translationValues(-vx, -vy, 0));
@@ -190,12 +189,21 @@ class _MapScreenState extends ConsumerState<MapScreen>
   Matrix4 _fitMatrix() =>
       _clampMatrix(Matrix4.diagonal3Values(_fitScale, _fitScale, 1));
 
-  Matrix4 _focusMatrix(Offset point, double scale) => _anchored(
-        scale,
-        point,
-        Offset(_viewport.width / 2,
-            kTopInset + (_viewport.height - kTopInset) / 2),
-      );
+  // ИСПРАВЛЕНО: Смещаем фокус вверх, чтобы здание не пряталось за шторкой
+  Matrix4 _focusMatrix(Offset point, double scale) {
+    // Высота, которая не перекрыта панелью фильтров сверху
+    final double visibleHeight = _viewport.height - kTopInset;
+    
+    // Целимся в точку, которая находится на 25% высоты сверху.
+    // Это оставит здание видимым, когда снизу откроется шторка на 50% экрана.
+    final double targetY = kTopInset + visibleHeight * 0.25;
+
+    return _anchored(
+      scale,
+      point,
+      Offset(_viewport.width / 2, targetY),
+    );
+  }
 
   void _animateTo(
     Matrix4 target, {
@@ -314,11 +322,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
     return best;
   }
 
-  // ОБНОВЛЕНО: Теперь клик проверяет и маркеры, и контуры зданий
   void _handleTap(List<MapBuilding> buildings, Offset viewportPoint) {
-    // 1. Проверяем попадание в маркеры (они фиксированного размера на экране)
     MapBuilding? bestMarker;
-    var bestDist = 24.0; // Радиус нажатия на маркер
+    var bestDist = 24.0;
 
     for (final b in buildings) {
       final markerScreenPos = MatrixUtils.transformPoint(_controller.value, b.center);
@@ -334,7 +340,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
       return;
     }
 
-    // 2. Если не попали в маркер, проверяем контуры зданий
     final hit = _hitTest(buildings, _controller.toScene(viewportPoint));
     if (hit != null) _onBuildingTap(hit);
   }
@@ -490,7 +495,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
                       ),
                   ),
                   
-                  // ИСПРАВЛЕНО: Обернуто в IgnorePointer, чтобы маркеры не перехватывали зум
                   IgnorePointer(
                     child: ValueListenableBuilder<Matrix4>(
                       valueListenable: _controller,
@@ -567,7 +571,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
         Positioned(
           left: screenPos.dx - 22,
           top: screenPos.dy - 22,
-          // ИСПРАВЛЕНО: Убран GestureDetector, оставлен только визуальный вид
           child: SizedBox(
             width: 44,
             height: 44,
