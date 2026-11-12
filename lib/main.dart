@@ -8,6 +8,7 @@ import 'data/database.dart';
 import 'data/daos/tasks_dao.dart';
 import 'data/repositories/task_repository.dart';
 import 'core/services/notification_service.dart';
+import 'data/providers.dart';
 
 // 1. Провайдер для базы данных ЗАКОММЕНТИЛ Т.К. ИМПОРТИРУЕТСЯ ИЗ PROVIDERS.DART
 // final databaseProvider = Provider<AppDatabase>((ref) {
@@ -15,21 +16,21 @@ import 'core/services/notification_service.dart';
 // });
 
 // 2. Провайдер для DAO (берет базу из первого провайдера)
-final tasksDaoProvider = Provider<TasksDao>((ref) {
-  final db = ref.watch(databaseProvider);
-  return db.tasksDao;
-});
+// final tasksDaoProvider = Provider<TasksDao>((ref) {
+//   final db = ref.watch(databaseProvider);
+//   return db.tasksDao;
+// });
 
-// 3. Провайдер для Репозитория (берет DAO из второго провайдера)
-final taskRepositoryProvider = Provider<TaskRepository>((ref) {
-  final dao = ref.watch(tasksDaoProvider);
-  return TaskRepository(dao);
-});
+// // 3. Провайдер для Репозитория (берет DAO из второго провайдера)
+// final taskRepositoryProvider = Provider<TaskRepository>((ref) {
+//   final dao = ref.watch(tasksDaoProvider);
+//   return TaskRepository(dao);
+// });
 
-// 4. Провайдер для Сервиса уведомлений
-final notificationServiceProvider = Provider<NotificationService>((ref) {
-  return NotificationService();
-});
+// // 4. Провайдер для Сервиса уведомлений
+// final notificationServiceProvider = Provider<NotificationService>((ref) {
+//   return NotificationService();
+// });
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
