@@ -4,9 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:salamanca/core/router/app_router.dart';
 import 'package:salamanca/core/theme/app_theme.dart';
-
-void async main() {
-  runApp(const ProviderScope(child: MyApp()));
 import 'data/database.dart';
 import 'data/daos/tasks_dao.dart';
 import 'data/repositories/task_repository.dart';
