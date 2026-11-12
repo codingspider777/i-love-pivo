@@ -1,41 +1,34 @@
 import 'package:drift/drift.dart';
-import '../database.dart'; // Импорт твоей базы данных
+import '../database.dart';
 
-// Привязываем DAO к таблице Tasks
 part 'tasks_dao.g.dart';
 
 @DriftAccessor(tables: [Tasks])
 class TasksDao extends DatabaseAccessor<AppDatabase> with _$TasksDaoMixin {
-  TasksDao(super.db); // Конструктор, обязательный для Drift
+  TasksDao(super.db);
 
   // --- CREATE ---
-  Future<int> insertTask(TasksCompanion task) {
-    return into(tasks).insert(task);
-  }
+  Future<int> insertTask(TasksCompanion task) => into(tasks).insert(task);
 
-  // --- READ (все задачи) ---
-  Future<List<Task>> getAllTasks() {
-    return select(tasks).get();
-  }
+  // --- READ ---
+  Future<List<TaskRow>> getAllTasks() => select(tasks).get();
 
-  // --- READ (одна задача по ID) ---
-  Future<Task?> getTaskById(int id) {
-    return (select(tasks)..where((t) => t.id.equals(id))).getSingleOrNull();
-  }
+  Future<TaskRow?> getTaskById(int id) =>
+      (select(tasks)..where((t) => t.id.equals(id))).getSingleOrNull();
 
   // --- UPDATE ---
-  Future<bool> updateTask(Task task) {
-    return update(tasks).replace(task);
-  }
+  Future<bool> updateTask(TaskRow task) => update(tasks).replace(task);
+
+  Future<int> updateTaskById(int id, TasksCompanion data) =>
+      (update(tasks)..where((t) => t.id.equals(id))).write(data);
+
+  Future<int> setCompleted(int id, bool value) =>
+      updateTaskById(id, TasksCompanion(isCompleted: Value(value)));
 
   // --- DELETE ---
-  Future<int> deleteTask(int id) {
-    return (delete(tasks)..where((t) => t.id.equals(id))).go();
-  }
+  Future<int> deleteTask(int id) =>
+      (delete(tasks)..where((t) => t.id.equals(id))).go();
 
   // --- READ (реактивный поток для UI) ---
-  // Это позволит экрану автоматически обновляться при изменении данных
-  Stream<List<Task>> watchAllTasks() {
-    return select(tasks).watch();
-  }
+  Stream<List<TaskRow>> watchAllTasks() => select(tasks).watch();
 }

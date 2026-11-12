@@ -1,29 +1,35 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:salamanca/core/utils/date_utils.dart';
 import 'package:salamanca/data/models/task.dart';
+import 'package:salamanca/data/providers.dart';
+import 'package:salamanca/data/repositories/task_repository.dart';
 
-/// Временное хранилище задач в памяти.
-/// Когда будет готова БД (Drift), заменить реализацию на репозиторий.
-class TasksNotifier extends Notifier<List<Task>> {
-  @override
-  List<Task> build() => [];
+/// Реактивный поток задач из Drift.
+final tasksStreamProvider = StreamProvider<List<Task>>((ref) {
+  return ref
+      .watch(taskRepositoryProvider)
+      .watchAllTasks()
+      .map((rows) => [for (final r in rows) Task.fromRow(r)]);
+});
 
-  void addTask(Task task) => state = [...state, task];
+/// Синхронный список для UI (пока поток грузится, список пуст).
+final tasksProvider = Provider<List<Task>>(
+  (ref) => ref.watch(tasksStreamProvider).value ?? const [],
+);
 
-  void updateTask(Task task) =>
-      state = [for (final t in state) t.id == task.id ? task : t];
+class TasksActions {
+  TasksActions(this._repo);
+  final TaskRepository _repo;
 
-  void removeTask(String id) =>
-      state = state.where((t) => t.id != id).toList();
-
-  void toggleDone(String id) => state = [
-    for (final t in state)
-      t.id == id ? t.copyWith(isDone: !t.isDone) : t,
-  ];
+  Future<void> add(Task t) => _repo.addTask(t.toCompanion());
+  Future<void> update(Task t) => _repo.updateTaskById(t.id, t.toCompanion());
+  Future<void> remove(int id) => _repo.deleteTask(id);
+  Future<void> toggleDone(Task t) => _repo.setCompleted(t.id, !t.isDone);
 }
 
-final tasksProvider =
-NotifierProvider<TasksNotifier, List<Task>>(TasksNotifier.new);
+final tasksActionsProvider = Provider<TasksActions>(
+  (ref) => TasksActions(ref.watch(taskRepositoryProvider)),
+);
 
 int _minutes(Task t) {
   final time = t.time;
@@ -45,5 +51,5 @@ List<Task> tasksOnDay(List<Task> tasks, DateTime day) {
 
 /// Передавать день в виде dateOnly(...).
 final tasksForDayProvider = Provider.family<List<Task>, DateTime>(
-      (ref, day) => tasksOnDay(ref.watch(tasksProvider), day),
+  (ref, day) => tasksOnDay(ref.watch(tasksProvider), day),
 );
