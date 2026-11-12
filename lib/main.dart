@@ -4,11 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:salamanca/core/router/app_router.dart';
 import 'package:salamanca/core/theme/app_theme.dart';
-import 'data/database.dart';
-import 'data/daos/tasks_dao.dart';
-import 'data/repositories/task_repository.dart';
+// import 'data/database.dart';
+// import 'data/daos/tasks_dao.dart';
+// import 'data/repositories/task_repository.dart';
 import 'core/services/notification_service.dart';
-import 'data/providers.dart';
+// import 'data/providers.dart';
 
 // 1. Провайдер для базы данных ЗАКОММЕНТИЛ Т.К. ИМПОРТИРУЕТСЯ ИЗ PROVIDERS.DART
 // final databaseProvider = Provider<AppDatabase>((ref) {
@@ -21,13 +21,13 @@ import 'data/providers.dart';
 //   return db.tasksDao;
 // });
 
-// // 3. Провайдер для Репозитория (берет DAO из второго провайдера)
+// 3. Провайдер для Репозитория (берет DAO из второго провайдера)
 // final taskRepositoryProvider = Provider<TaskRepository>((ref) {
 //   final dao = ref.watch(tasksDaoProvider);
 //   return TaskRepository(dao);
 // });
 
-// // 4. Провайдер для Сервиса уведомлений
+// 4. Провайдер для Сервиса уведомлений
 final notificationServiceProvider = Provider<NotificationService>((ref) {
   return NotificationService();
 });
