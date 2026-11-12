@@ -1,8 +1,11 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:path_drawing/path_drawing.dart';
+import 'package:xml/xml.dart';
 import 'package:salamanca/features/map/models/map_building.dart';
 import 'package:salamanca/features/map/widgets/building_sheet.dart'; // даёт categoryIcon
 import 'package:salamanca/shared/widgets/app_choice_chip.dart';
@@ -19,6 +22,97 @@ const Rect kMapContent = Rect.fromLTWH(0, 0, kMapSize, kMapSize);
 
 /// Высота панели фильтров поверх карты (карта «целиком» вписывается под неё).
 const double kTopInset = 52;
+
+/// Контуры зданий из SVG: элемент с id == id здания (path/polygon/rect или группа).
+/// Координаты приводятся к системе карты (0..kMapSize).
+final buildingShapesProvider = FutureProvider<Map<String, Path>>((ref) async {
+  try {
+    final raw =
+        await rootBundle.loadString('assets/images/main_map_light.svg');
+    return _parseShapes(raw);
+  } catch (_) {
+    return const {};
+  }
+});
+
+Map<String, Path> _parseShapes(String raw) {
+  final doc = XmlDocument.parse(raw);
+  final svg = doc.rootElement;
+
+  double vx = 0, vy = 0, vw = kMapSize, vh = kMapSize;
+  final vb = (svg.getAttribute('viewBox') ?? '')
+      .trim()
+      .split(RegExp(r'[\s,]+'))
+      .map(double.tryParse)
+      .toList();
+  if (vb.length == 4 && vb.every((e) => e != null)) {
+    vx = vb[0]!;
+    vy = vb[1]!;
+    vw = vb[2]!;
+    vh = vb[3]!;
+  }
+  final k = math.min(kMapSize / vw, kMapSize / vh);
+  final m = Matrix4.identity()
+    ..translate((kMapSize - vw * k) / 2, (kMapSize - vh * k) / 2)
+    ..scale(k, k, 1.0)
+    ..translate(-vx, -vy);
+
+  final result = <String, Path>{};
+  for (final e in doc.descendants.whereType<XmlElement>()) {
+    final id = e.getAttribute('id');
+    if (id == null) continue;
+    final path = _elementPath(e);
+    if (path != null) result[id] = path.transform(m.storage);
+  }
+  return result;
+}
+
+Path? _elementPath(XmlElement e) {
+  final own = _shapePath(e);
+  if (own != null) return own;
+  final combined = Path();
+  var any = false;
+  for (final c in e.descendants.whereType<XmlElement>()) {
+    final p = _shapePath(c);
+    if (p != null) {
+      combined.addPath(p, Offset.zero);
+      any = true;
+    }
+  }
+  return any ? combined : null;
+}
+
+Path? _shapePath(XmlElement e) {
+  double n(String a) => double.tryParse(e.getAttribute(a) ?? '') ?? 0;
+  switch (e.name.local) {
+    case 'path':
+      final d = e.getAttribute('d');
+      if (d == null) return null;
+      final path = parseSvgPathData(d);
+      if (e.getAttribute('fill-rule') == 'evenodd') {
+        path.fillType = PathFillType.evenOdd;
+      }
+      return path;
+    case 'polygon':
+    case 'polyline':
+      final nums = (e.getAttribute('points') ?? '')
+          .trim()
+          .split(RegExp(r'[\s,]+'))
+          .map(double.tryParse)
+          .whereType<double>()
+          .toList();
+      if (nums.length < 6) return null;
+      return Path()
+        ..addPolygon([
+          for (var i = 0; i + 1 < nums.length; i += 2)
+            Offset(nums[i], nums[i + 1]),
+        ], true);
+    case 'rect':
+      return Path()
+        ..addRect(Rect.fromLTWH(n('x'), n('y'), n('width'), n('height')));
+  }
+  return null;
+}
 
 class MapScreen extends ConsumerStatefulWidget {
   const MapScreen({super.key, this.focusBuildingId});
@@ -38,6 +132,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
   Size _viewport = Size.zero;
   double _fitScale = 0.5;
   String? _selectedId;
+  Map<String, Path> _shapes = const {};
   bool _isInitialized = false;
 
   // состояние жеста
@@ -201,15 +296,28 @@ class _MapScreenState extends ConsumerState<MapScreen>
 
   // ---------- тапы по зданиям ----------
 
+  /// Точный контур: polygon из JSON, иначе контур из SVG по id.
+  Path? _exactShape(MapBuilding b) {
+    final poly = b.polygon;
+    if (poly != null && poly.isNotEmpty) {
+      return Path()..addPolygon(poly, true);
+    }
+    return _shapes[b.id];
+  }
+
+  /// Контур для подсветки (запасной вариант — прямоугольник).
+  Path _highlightShape(MapBuilding b) =>
+      _exactShape(b) ?? (Path()..addRect(b.rect));
+
   MapBuilding? _hitTest(List<MapBuilding> buildings, Offset scenePoint) {
     MapBuilding? best;
     var bestDist = double.infinity;
 
     for (final b in buildings) {
       bool isHit;
-      if (b.polygon != null && b.polygon!.isNotEmpty) {
-        final path = Path()..addPolygon(b.polygon!, true);
-        isHit = path.contains(scenePoint);
+      final exact = _exactShape(b);
+      if (exact != null) {
+        isHit = exact.contains(scenePoint);
       } else {
         final slop = kHitSlop / (_scale == 0 ? 1.0 : _scale);
         isHit = b.rect.inflate(slop).contains(scenePoint);
@@ -267,6 +375,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
     final buildingsAsync = ref.watch(buildingsProvider);
     final scheme = Theme.of(context).colorScheme;
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    _shapes = ref.watch(buildingShapesProvider).value ?? const {};
 
     return Scaffold(
       appBar: AppBar(title: const Text('Карта кампуса')),
@@ -360,33 +469,19 @@ class _MapScreenState extends ConsumerState<MapScreen>
                                         ),
                                         for (final b in buildings)
                                           if (b.id == _selectedId)
-                                            if (b.polygon != null)
-                                              Positioned.fill(
-                                                child: IgnorePointer(
-                                                  child: CustomPaint(
-                                                    painter:
-                                                        _PolygonHighlightPainter(
-                                                      polygon: b.polygon!,
-                                                      color: scheme.secondary
-                                                          .withValues(
-                                                              alpha: 0.45),
-                                                    ),
-                                                  ),
-                                                ),
-                                              )
-                                            else
-                                              Positioned.fromRect(
-                                                rect: b.rect,
-                                                child: IgnorePointer(
-                                                  child: DecoratedBox(
-                                                    decoration: BoxDecoration(
-                                                      color: scheme.secondary
-                                                          .withValues(
-                                                              alpha: 0.45),
-                                                    ),
+                                            Positioned.fill(
+                                              child: IgnorePointer(
+                                                child: CustomPaint(
+                                                  painter: _ShapeHighlightPainter(
+                                                    path: _highlightShape(b),
+                                                    fill: scheme.secondary
+                                                        .withValues(
+                                                            alpha: 0.35),
+                                                    stroke: scheme.secondary,
                                                   ),
                                                 ),
                                               ),
+                                            ),
                                       ],
                                     ),
                                   ),
@@ -582,21 +677,35 @@ class _CategoryFilterBar extends StatelessWidget {
   }
 }
 
-class _PolygonHighlightPainter extends CustomPainter {
-  _PolygonHighlightPainter({required this.polygon, required this.color});
-  final List<Offset> polygon;
-  final Color color;
+class _ShapeHighlightPainter extends CustomPainter {
+  _ShapeHighlightPainter({
+    required this.path,
+    required this.fill,
+    required this.stroke,
+  });
+  final Path path;
+  final Color fill;
+  final Color stroke;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.fill;
-    final path = Path()..addPolygon(polygon, true);
-    canvas.drawPath(path, paint);
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = fill
+        ..style = PaintingStyle.fill,
+    );
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = stroke
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3
+        ..strokeJoin = StrokeJoin.round,
+    );
   }
 
   @override
-  bool shouldRepaint(covariant _PolygonHighlightPainter oldDelegate) =>
-      oldDelegate.color != color || oldDelegate.polygon != polygon;
+  bool shouldRepaint(covariant _ShapeHighlightPainter old) =>
+      old.fill != fill || old.stroke != stroke || old.path != path;
 }
