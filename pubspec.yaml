@@ -26,6 +26,7 @@ dependencies:
     sdk: flutter
   url_launcher: ^6.2.5
   path_drawing: ^1.0.1 # <-- ДОБАВЛЕНО для парсинга SVG
+  xml: ^7.0.1 # <-- ДОБАВЛЕНО для парсинга структуры SVG (устраняет ошибку CI)
 
 dev_dependencies:
   flutter_test:

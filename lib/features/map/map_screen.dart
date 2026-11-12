@@ -52,10 +52,11 @@ Map<String, Path> _parseShapes(String raw) {
     vh = vb[3]!;
   }
   final k = math.min(kMapSize / vw, kMapSize / vh);
-  final m = Matrix4.identity()
-    ..translate((kMapSize - vw * k) / 2, (kMapSize - vh * k) / 2)
-    ..scale(k, k, 1.0)
-    ..translate(-vx, -vy);
+  
+  // ИСПРАВЛЕНО: Замена устаревших ..translate() и ..scale() на безопасные методы
+  final m = Matrix4.translationValues((kMapSize - vw * k) / 2, (kMapSize - vh * k) / 2, 0)
+      .multiplied(Matrix4.diagonal3Values(k, k, 1.0))
+      .multiplied(Matrix4.translationValues(-vx, -vy, 0));
 
   final result = <String, Path>{};
   for (final e in doc.descendants.whereType<XmlElement>()) {
@@ -187,14 +188,18 @@ class _MapScreenState extends ConsumerState<MapScreen>
           .toDouble();
     }
 
-    return Matrix4.translationValues(dx, dy, 0)..scale(s, s, 1.0);
+    // ИСПРАВЛЕНО: Замена ..scale() на multiplied
+    return Matrix4.translationValues(dx, dy, 0)
+        .multiplied(Matrix4.diagonal3Values(s, s, 1.0));
   }
 
   /// Матрица, при которой точка [scene] карты окажется в [screen].
   Matrix4 _anchored(double scale, Offset scene, Offset screen) {
     final t = screen - scene * scale;
+    // ИСПРАВЛЕНО: Замена ..scale() на multiplied
     return _clampMatrix(
-        Matrix4.translationValues(t.dx, t.dy, 0)..scale(scale, scale, 1.0));
+        Matrix4.translationValues(t.dx, t.dy, 0)
+            .multiplied(Matrix4.diagonal3Values(scale, scale, 1.0)));
   }
 
   /// Вся карта целиком, по центру.
@@ -273,11 +278,14 @@ class _MapScreenState extends ConsumerState<MapScreen>
     final v = d.velocity.pixelsPerSecond;
     if (d.pointerCount == 0 && v.distance > 200) {
       final t = _controller.value.getTranslation();
+      
+      // ИСПРАВЛЕНО: Замена ..scale() на multiplied
       final target = _clampMatrix(
         Matrix4.translationValues(
-            t.x + v.dx * 0.25, t.y + v.dy * 0.25, 0)
-          ..scale(s, s, 1.0),
+                t.x + v.dx * 0.25, t.y + v.dy * 0.25, 0)
+            .multiplied(Matrix4.diagonal3Values(s, s, 1.0)),
       );
+      
       _animateTo(target,
           duration: const Duration(milliseconds: 550),
           curve: Curves.decelerate);
