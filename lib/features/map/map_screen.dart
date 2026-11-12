@@ -189,13 +189,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
   Matrix4 _fitMatrix() =>
       _clampMatrix(Matrix4.diagonal3Values(_fitScale, _fitScale, 1));
 
-  // ИСПРАВЛЕНО: Смещаем фокус вверх, чтобы здание не пряталось за шторкой
   Matrix4 _focusMatrix(Offset point, double scale) {
-    // Высота, которая не перекрыта панелью фильтров сверху
     final double visibleHeight = _viewport.height - kTopInset;
-    
-    // Целимся в точку, которая находится на 25% высоты сверху.
-    // Это оставит здание видимым, когда снизу откроется шторка на 50% экрана.
     final double targetY = kTopInset + visibleHeight * 0.25;
 
     return _anchored(
@@ -224,8 +219,25 @@ class _MapScreenState extends ConsumerState<MapScreen>
     _anim.forward(from: 0);
   }
 
+  // ИСПРАВЛЕНО: Динамический расчет масштаба в зависимости от размера здания
   void _focusBuilding(MapBuilding b, {bool animate = true}) {
-    final s = math.max(_scale, 2.5).clamp(_fitScale, kMaxScale).toDouble();
+    final rect = b.rect;
+    final visibleHeight = _viewport.height - kTopInset;
+
+    // Желаемые размеры здания на экране: 60% ширины экрана и 35% видимой высоты
+    final maxW = _viewport.width * 0.6;
+    final maxH = visibleHeight * 0.35;
+
+    // Считаем, какой масштаб нужен, чтобы здание вписалось в эти рамки
+    final scaleX = maxW / (rect.width == 0 ? 1 : rect.width);
+    final scaleY = maxH / (rect.height == 0 ? 1 : rect.height);
+
+    // Берем меньший из двух (чтобы длинное здание не вылезло за экран)
+    final dynamicScale = math.min(scaleX, scaleY);
+
+    // Ограничиваем итоговый зум: не слишком близко (1.8), не слишком далеко (4.0)
+    final s = dynamicScale.clamp(1.8, 4.0).toDouble();
+
     final target = _focusMatrix(b.center, s);
     if (animate) {
       _animateTo(target);
