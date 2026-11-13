@@ -38,6 +38,7 @@ class _MonthScreenState extends ConsumerState<MonthScreen> {
       appBar: AppBar(
         title: const Text('Календарь'),
         actions: [
+          IconButton(tooltip: 'Настройки', icon: const Icon(Icons.settings_outlined), onPressed: () => context.push('/settings')),
           IconButton(
             tooltip: 'Карта кампуса',
             icon: const Icon(Icons.map_outlined),

@@ -23,7 +23,7 @@ class _DayTaskListState extends ConsumerState<DayTaskList> {
   void _onDismissed(Task task) {
     setState(() => _removed.add(task.id));
     final actions = ref.read(tasksActionsProvider);
-    actions.remove(task.id);
+
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
@@ -54,8 +54,27 @@ class _DayTaskListState extends ConsumerState<DayTaskList> {
         final task = tasks[index];
         return Dismissible(
           key: ValueKey(task.id),
-          direction: DismissDirection.endToStart,
-          background: Container(
+          direction: DismissDirection.horizontal,
+          confirmDismiss: (direction) async {
+            try {
+              if (direction == DismissDirection.startToEnd) {
+                await actions.toggleDone(task);
+                return false;
+              }
+              await actions.remove(task.id);
+              return true;
+            } catch (_) {
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Не удалось сохранить изменение'),
+                  ),
+                );
+              }
+              return false;
+            }
+          },
+          secondaryBackground: Container(
             alignment: Alignment.centerRight,
             padding: const EdgeInsets.only(right: 20),
             decoration: BoxDecoration(
@@ -63,6 +82,18 @@ class _DayTaskListState extends ConsumerState<DayTaskList> {
               borderRadius: BorderRadius.circular(16),
             ),
             child: Icon(Icons.delete_outline, color: scheme.onError),
+          ),
+          background: Container(
+            alignment: Alignment.centerLeft,
+            padding: const EdgeInsets.only(left: 20),
+            decoration: BoxDecoration(
+              color: scheme.primary,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Icon(
+              task.isDone ? Icons.undo : Icons.check,
+              color: scheme.onPrimary,
+            ),
           ),
           onDismissed: (_) => _onDismissed(task),
           child: TaskTile(
@@ -99,17 +130,23 @@ class _EmptyState extends StatelessWidget {
                       color: scheme.secondary.withValues(alpha: 0.12),
                       shape: BoxShape.circle,
                     ),
-                    child: Icon(Icons.event_available,
-                        size: 48, color: scheme.secondary),
+                    child: Icon(
+                      Icons.event_available,
+                      size: 48,
+                      color: scheme.secondary,
+                    ),
                   ),
                   const SizedBox(height: 16),
-                  Text('На этот день задач нет',
-                      style: theme.textTheme.titleMedium),
+                  Text(
+                    'На этот день задач нет',
+                    style: theme.textTheme.titleMedium,
+                  ),
                   const SizedBox(height: 4),
                   Text(
                     'Нажмите «+», чтобы добавить',
-                    style: theme.textTheme.bodyMedium
-                        ?.copyWith(color: scheme.onSurfaceVariant),
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
                   ),
                 ],
               ),
