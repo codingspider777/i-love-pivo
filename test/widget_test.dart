@@ -1,3 +1,4 @@
+import 'package:salamanca/features/tasks/task_editor_screen.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -17,6 +18,13 @@ Future<void> pumpApp(WidgetTester tester) async {
 }
 
 void main() {
+  testWidgets('Siri draft fills title without saving a task', (tester) async {
+    await tester.pumpWidget(const ProviderScope(child: MaterialApp(home: TaskEditorScreen(initialTitle: 'Купить тетради'))));
+    await tester.pumpAndSettle();
+    expect(find.text('Купить тетради'), findsOneWidget);
+    expect(find.text('Сохранить'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
   testWidgets('App should build without crashing', (WidgetTester tester) async {
     await pumpApp(tester);
 
