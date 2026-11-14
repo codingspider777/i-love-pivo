@@ -9,10 +9,11 @@ import 'package:salamanca/shared/widgets/custom_text_field.dart';
 
 /// Редактор задачи. Если [taskId] задан — редактирование, иначе создание.
 class TaskEditorScreen extends ConsumerStatefulWidget {
-  const TaskEditorScreen({super.key, this.taskId, this.initialDate});
+  const TaskEditorScreen({super.key, this.taskId, this.initialDate, this.initialTitle});
 
   final String? taskId;
   final DateTime? initialDate;
+  final String? initialTitle;
 
   @override
   ConsumerState<TaskEditorScreen> createState() => _TaskEditorScreenState();
@@ -42,7 +43,7 @@ class _TaskEditorScreenState extends ConsumerState<TaskEditorScreen> {
           ref.read(tasksProvider).where((t) => t.id == id).firstOrNull;
     }
     final task = _existing;
-    _titleCtrl = TextEditingController(text: task?.title);
+    _titleCtrl = TextEditingController(text: task?.title ?? widget.initialTitle);
     _descCtrl = TextEditingController(text: task?.description);
     _date = task?.date ?? widget.initialDate ?? dateOnly(DateTime.now());
     _time = task?.time;

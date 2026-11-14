@@ -1,3 +1,5 @@
+import 'package:salamanca/features/settings/settings_screen.dart';
+import 'package:salamanca/features/tasks/task_details_screen.dart';
 //import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:salamanca/core/utils/date_utils.dart';
@@ -11,14 +13,12 @@ GoRouter createAppRouter({List<RouteBase> extraRoutes = const []}) {
   return GoRouter(
     initialLocation: '/',
     routes: [
-      GoRoute(
-        path: '/',
-        builder: (context, state) => const MonthScreen(),
-      ),
+      GoRoute(path: '/', builder: (context, state) => const MonthScreen()),
       GoRoute(
         path: '/day/:date',
         builder: (context, state) {
-          final date = dateFromParam(state.pathParameters['date']) ??
+          final date =
+              dateFromParam(state.pathParameters['date']) ??
               dateOnly(DateTime.now());
           return DayScreen(date: date);
         },
@@ -28,19 +28,28 @@ GoRouter createAppRouter({List<RouteBase> extraRoutes = const []}) {
         path: '/task/new',
         builder: (context, state) => TaskEditorScreen(
           initialDate: dateFromParam(state.uri.queryParameters['date']),
+          initialTitle: state.uri.queryParameters['title'],
         ),
       ),
       GoRoute(
-        path: '/task/:id',
+        path: '/task/:id/edit',
         builder: (context, state) =>
             TaskEditorScreen(taskId: state.pathParameters['id']),
       ),
       GoRoute(
         path: '/map',
-        builder: (context, state) => MapScreen(
-          focusBuildingId: state.uri.queryParameters['building'],
-        ),
-      ),  
+        builder: (context, state) =>
+            MapScreen(focusBuildingId: state.uri.queryParameters['building']),
+      ),
+      GoRoute(
+        path: '/task/:id',
+        builder: (context, state) =>
+            TaskDetailsScreen(taskId: state.pathParameters['id']!),
+      ),
+      GoRoute(
+        path: '/settings',
+        builder: (context, state) => const SettingsScreen(),
+      ),
       ...extraRoutes,
     ],
   );
