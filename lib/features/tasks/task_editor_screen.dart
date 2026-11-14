@@ -3,8 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:salamanca/core/utils/date_utils.dart';
 import 'package:salamanca/data/models/task.dart';
+import 'package:salamanca/features/settings/providers/settings_providers.dart';
 import 'package:salamanca/features/tasks/providers/tasks_provider.dart';
 import 'package:salamanca/features/tasks/widgets/priority_chips.dart';
+import 'package:salamanca/shared/widgets/app_choice_chip.dart';
 import 'package:salamanca/shared/widgets/custom_text_field.dart';
 
 /// Редактор задачи. Если [taskId] задан — редактирование, иначе создание.
@@ -29,6 +31,7 @@ class _TaskEditorScreenState extends ConsumerState<TaskEditorScreen> {
   late DateTime _date;
   TimeOfDay? _time;
   TaskPriority _priority = TaskPriority.medium;
+  int _categoryId = 1;
   bool _formatted = false;
 
   bool get _isEditing => widget.taskId != null;
@@ -47,6 +50,7 @@ class _TaskEditorScreenState extends ConsumerState<TaskEditorScreen> {
     _date = task?.date ?? widget.initialDate ?? dateOnly(DateTime.now());
     _time = task?.time;
     _priority = task?.priority ?? TaskPriority.medium;
+    _categoryId = task?.categoryId ?? 1;
   }
 
   @override
@@ -116,6 +120,7 @@ class _TaskEditorScreenState extends ConsumerState<TaskEditorScreen> {
         time: _time,
         clearTime: _time == null,
         priority: _priority,
+        categoryId: _categoryId,
       ));
     } else {
       await actions.add(Task(
@@ -125,6 +130,7 @@ class _TaskEditorScreenState extends ConsumerState<TaskEditorScreen> {
         date: _date,
         time: _time,
         priority: _priority,
+        categoryId: _categoryId,
       ));
     }
     if (mounted) context.pop();
@@ -183,6 +189,7 @@ class _TaskEditorScreenState extends ConsumerState<TaskEditorScreen> {
     }
 
     final theme = Theme.of(context);
+    final categories = ref.watch(categoriesProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -252,14 +259,14 @@ class _TaskEditorScreenState extends ConsumerState<TaskEditorScreen> {
                 suffixIcon: _time == null
                     ? null
                     : IconButton(
-                        tooltip: 'Убрать время',
-                        icon: const Icon(Icons.close),
-                        onPressed: () {
-                          _time = null;
-                          _syncTime();
-                          setState(() {});
-                        },
-                      ),
+                  tooltip: 'Убрать время',
+                  icon: const Icon(Icons.close),
+                  onPressed: () {
+                    _time = null;
+                    _syncTime();
+                    setState(() {});
+                  },
+                ),
                 validator: _validateTime,
               ),
               const SizedBox(height: 20),
@@ -274,6 +281,28 @@ class _TaskEditorScreenState extends ConsumerState<TaskEditorScreen> {
               PriorityChips(
                 value: _priority,
                 onChanged: (p) => setState(() => _priority = p),
+              ),
+              const SizedBox(height: 20),
+              Padding(
+                padding: const EdgeInsets.only(left: 4, bottom: 8),
+                child: Text(
+                  'Категория',
+                  style: theme.textTheme.labelMedium
+                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                ),
+              ),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final c in categories)
+                    AppChoiceChip(
+                      label: c.name,
+                      icon: c.icon,
+                      selected: c.id == _categoryId,
+                      onSelected: (_) => setState(() => _categoryId = c.id),
+                    ),
+                ],
               ),
             ],
           ),
