@@ -4,7 +4,9 @@ import 'package:go_router/go_router.dart';
 import 'package:salamanca/core/utils/date_utils.dart';
 import 'package:salamanca/data/models/task.dart';
 import 'package:salamanca/features/tasks/providers/tasks_provider.dart';
+import 'package:salamanca/features/tasks/quick_add/quick_add_sheet.dart';
 import 'package:salamanca/features/tasks/widgets/task_tile.dart';
+import 'package:salamanca/shared/widgets/empty_state.dart';
 
 /// Список задач выбранного дня (из Drift) + пустое состояние.
 class DayTaskList extends ConsumerStatefulWidget {
@@ -44,7 +46,17 @@ class _DayTaskListState extends ConsumerState<DayTaskList> {
     final scheme = Theme.of(context).colorScheme;
     final actions = ref.read(tasksActionsProvider);
 
-    if (tasks.isEmpty) return const _EmptyState();
+    if (tasks.isEmpty) {
+      return EmptyState(
+        icon: Icons.event_available,
+        title: 'На этот день задач нет',
+        message: 'Нажмите «+», чтобы добавить',
+        actionLabel: 'Быстрая задача',
+        actionIcon: Icons.bolt_rounded,
+        onAction: () =>
+            QuickAddSheet.show(context, date: dateOnly(widget.day)),
+      );
+    }
 
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
@@ -69,51 +81,6 @@ class _DayTaskListState extends ConsumerState<DayTaskList> {
             task: task,
             onTap: () => context.push('/task/${task.id}'),
             onToggle: () => actions.toggleDone(task),
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _EmptyState extends StatelessWidget {
-  const _EmptyState();
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return SingleChildScrollView(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: constraints.maxHeight),
-            child: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 96,
-                    height: 96,
-                    decoration: BoxDecoration(
-                      color: scheme.secondary.withValues(alpha: 0.12),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(Icons.event_available,
-                        size: 48, color: scheme.secondary),
-                  ),
-                  const SizedBox(height: 16),
-                  Text('На этот день задач нет',
-                      style: theme.textTheme.titleMedium),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Нажмите «+», чтобы добавить',
-                    style: theme.textTheme.bodyMedium
-                        ?.copyWith(color: scheme.onSurfaceVariant),
-                  ),
-                ],
-              ),
-            ),
           ),
         );
       },
