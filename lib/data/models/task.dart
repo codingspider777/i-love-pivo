@@ -22,6 +22,7 @@ class Task {
     this.priority = TaskPriority.medium,
     this.isDone = false,
     this.buildingId,
+    this.categoryId = 1,
   });
 
   /// 0 — ещё не сохранена в БД.
@@ -40,6 +41,9 @@ class Task {
   /// Для связки «задача ↔ карта».
   final String? buildingId;
 
+  /// Категория (см. таблицу categories).
+  final int categoryId;
+
   DateTime get dueTime => DateTime(
       date.year, date.month, date.day, time?.hour ?? 0, time?.minute ?? 0);
 
@@ -54,18 +58,20 @@ class Task {
       priority: TaskPriority.values[r.priority.clamp(0, 2)],
       isDone: r.isCompleted,
       buildingId: r.buildingId,
+      categoryId: r.categoryId,
     );
   }
 
   TasksCompanion toCompanion() => TasksCompanion(
-        title: Value(title),
-        description: Value(description.isEmpty ? null : description),
-        dueTime: Value(dueTime),
-        isCompleted: Value(isDone),
-        buildingId: Value(buildingId),
-        priority: Value(priority.index),
-        hasTime: Value(time != null),
-      );
+    title: Value(title),
+    description: Value(description.isEmpty ? null : description),
+    dueTime: Value(dueTime),
+    isCompleted: Value(isDone),
+    buildingId: Value(buildingId),
+    priority: Value(priority.index),
+    hasTime: Value(time != null),
+    categoryId: Value(categoryId),
+  );
 
   Task copyWith({
     String? title,
@@ -76,6 +82,7 @@ class Task {
     TaskPriority? priority,
     bool? isDone,
     String? buildingId,
+    int? categoryId,
   }) {
     return Task(
       id: id,
@@ -86,6 +93,7 @@ class Task {
       priority: priority ?? this.priority,
       isDone: isDone ?? this.isDone,
       buildingId: buildingId ?? this.buildingId,
+      categoryId: categoryId ?? this.categoryId,
     );
   }
 }
