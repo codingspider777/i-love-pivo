@@ -25,6 +25,8 @@ dependencies:
   flutter_localizations:
     sdk: flutter
   url_launcher: ^6.2.5
+  home_widget: ^0.10.0
+  workmanager: ^0.10.10
 
 dev_dependencies:
   flutter_test:
