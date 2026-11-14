@@ -3,8 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:salamanca/core/utils/date_utils.dart';
+import 'package:salamanca/data/models/category.dart';
 import 'package:salamanca/data/models/task.dart';
+import 'package:salamanca/features/settings/providers/settings_providers.dart';
 import 'package:salamanca/features/tasks/providers/tasks_provider.dart';
+import 'package:salamanca/features/tasks/quick_add/quick_add_sheet.dart';
 import 'package:salamanca/features/tasks/widgets/day_task_list.dart';
 import 'package:table_calendar/table_calendar.dart';
 
@@ -20,16 +23,19 @@ class _MonthScreenState extends ConsumerState<MonthScreen> {
   DateTime _selectedDay = dateOnly(DateTime.now());
 
   void _goToToday() => setState(() {
-        _focusedDay = DateTime.now();
-        _selectedDay = dateOnly(DateTime.now());
-      });
+    _focusedDay = DateTime.now();
+    _selectedDay = dateOnly(DateTime.now());
+  });
 
   void _addTask() =>
       context.push('/task/new?date=${dateToParam(_selectedDay)}');
 
+  void _quickAdd() => QuickAddSheet.show(context, date: _selectedDay);
+
   @override
   Widget build(BuildContext context) {
     final tasks = ref.watch(tasksProvider);
+    final cats = ref.watch(categoriesProvider);
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final locale = Localizations.localeOf(context).toString();
@@ -39,9 +45,20 @@ class _MonthScreenState extends ConsumerState<MonthScreen> {
         title: const Text('Календарь'),
         actions: [
           IconButton(
+            tooltip: 'Неделя',
+            icon: const Icon(Icons.view_week_outlined),
+            onPressed: () =>
+                context.push('/week?date=${dateToParam(_selectedDay)}'),
+          ),
+          IconButton(
             tooltip: 'Карта кампуса',
             icon: const Icon(Icons.map_outlined),
             onPressed: () => context.push('/map'),
+          ),
+          IconButton(
+            tooltip: 'Настройки',
+            icon: const Icon(Icons.tune),
+            onPressed: () => context.push('/settings'),
           ),
           IconButton(
             tooltip: 'Сегодня',
@@ -55,6 +72,34 @@ class _MonthScreenState extends ConsumerState<MonthScreen> {
           ),
           const SizedBox(width: 8),
         ],
+      ),
+      floatingActionButton: FloatingActionButton(
+        tooltip: 'Быстрая задача',
+        onPressed: _quickAdd,
+        child: const Icon(Icons.bolt_rounded),
+      ),
+      // «Ручка» внизу: свайп вверх открывает быстрое добавление.
+      bottomNavigationBar: SafeArea(
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: _quickAdd,
+          onVerticalDragEnd: (d) {
+            if ((d.primaryVelocity ?? 0) < -250) _quickAdd();
+          },
+          child: SizedBox(
+            height: 28,
+            child: Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: scheme.outlineVariant,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
       body: Column(
         children: [
@@ -81,6 +126,31 @@ class _MonthScreenState extends ConsumerState<MonthScreen> {
                     _focusedDay = focused;
                   }),
                   onPageChanged: (focused) => _focusedDay = focused,
+                  calendarBuilders: CalendarBuilders<Task>(
+                    // Маркеры окрашены в цвета категорий задач.
+                    markerBuilder: (context, day, events) {
+                      if (events.isEmpty) return null;
+                      return Positioned(
+                        bottom: 5,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            for (final e in events.take(3))
+                              Container(
+                                width: 6,
+                                height: 6,
+                                margin:
+                                const EdgeInsets.symmetric(horizontal: 1),
+                                decoration: BoxDecoration(
+                                  color: categoryOf(cats, e.categoryId).color,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
                   headerStyle: HeaderStyle(
                     titleCentered: true,
                     formatButtonVisible: false,
@@ -91,8 +161,8 @@ class _MonthScreenState extends ConsumerState<MonthScreen> {
                       color: scheme.onSurface,
                     ),
                     titleTextFormatter: (date, loc) =>
-                        toBeginningOfSentenceCase(
-                            DateFormat('LLLL yyyy', loc).format(date))!,
+                    toBeginningOfSentenceCase(
+                        DateFormat('LLLL yyyy', loc).format(date))!,
                   ),
                   daysOfWeekStyle: DaysOfWeekStyle(
                     weekdayStyle: TextStyle(
@@ -129,10 +199,6 @@ class _MonthScreenState extends ConsumerState<MonthScreen> {
                       color: scheme.primary,
                       shape: BoxShape.circle,
                     ),
-                    markerDecoration: BoxDecoration(
-                      color: scheme.secondary,
-                      shape: BoxShape.circle,
-                    ),
                   ),
                 ),
               ),
@@ -149,7 +215,26 @@ class _MonthScreenState extends ConsumerState<MonthScreen> {
               ),
             ),
           ),
-          Expanded(child: DayTaskList(day: _selectedDay)),
+          // Плавная смена списка при переключении дня.
+          Expanded(
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 250),
+              transitionBuilder: (child, anim) => FadeTransition(
+                opacity: anim,
+                child: SlideTransition(
+                  position: Tween(
+                    begin: const Offset(0, 0.03),
+                    end: Offset.zero,
+                  ).animate(anim),
+                  child: child,
+                ),
+              ),
+              child: KeyedSubtree(
+                key: ValueKey<DateTime>(_selectedDay),
+                child: DayTaskList(day: _selectedDay),
+              ),
+            ),
+          ),
         ],
       ),
     );

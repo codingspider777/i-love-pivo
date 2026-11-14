@@ -4,32 +4,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:salamanca/core/router/app_router.dart';
 import 'package:salamanca/core/theme/app_theme.dart';
-
-void async main() {
-  runApp(const ProviderScope(child: MyApp()));
-import 'data/database.dart';
-import 'data/daos/tasks_dao.dart';
-import 'data/repositories/task_repository.dart';
+import 'package:salamanca/features/widget/widget_service.dart';
 import 'core/services/notification_service.dart';
 
-// 1. Провайдер для базы данных
-final databaseProvider = Provider<AppDatabase>((ref) {
-  return AppDatabase();
-});
+// Провайдеры базы/DAO/репозитория живут в data/providers.dart.
 
-// 2. Провайдер для DAO (берет базу из первого провайдера)
-final tasksDaoProvider = Provider<TasksDao>((ref) {
-  final db = ref.watch(databaseProvider);
-  return db.tasksDao;
-});
-
-// 3. Провайдер для Репозитория (берет DAO из второго провайдера)
-final taskRepositoryProvider = Provider<TaskRepository>((ref) {
-  final dao = ref.watch(tasksDaoProvider);
-  return TaskRepository(dao);
-});
-
-// 4. Провайдер для Сервиса уведомлений
+// Провайдер для сервиса уведомлений
 final notificationServiceProvider = Provider<NotificationService>((ref) {
   return NotificationService();
 });
@@ -39,21 +19,24 @@ void main() async {
   final notificationService = NotificationService();
   await notificationService.init();
   await notificationService.requestPermissions();
+  await WidgetBackground.init(); // ночное обновление Android-виджета
   runApp(
-    // Оборачиваем приложение в ProviderScope
     const ProviderScope(
       child: MyApp(),
     ),
   );
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends ConsumerWidget {
   const MyApp({super.key});
 
   static final GoRouter _router = createAppRouter();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Любое изменение задач/категорий перерисовывает виджет на рабочем столе.
+    ref.watch(widgetSyncProvider);
+
     return MaterialApp.router(
       title: 'Salamanca',
       debugShowCheckedModeBanner: false,
