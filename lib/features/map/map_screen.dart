@@ -134,8 +134,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
   Offset _lastFocal = Offset.zero;
   Offset _doubleTapPos = Offset.zero;
 
-  final Set<BuildingCategory> _filters = {};
-
   /// Выбранные категории. Пустой набор = показывать все.
   final Set<BuildingCategory> _filters = {};
 

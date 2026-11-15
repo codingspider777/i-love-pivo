@@ -56,10 +56,11 @@ class UserPrefs extends Table {
 }
 
 @DriftDatabase(
-  tables: [Tasks, Buildings, Events, Categories, UserPrefs],
+  tables: [Tasks, Buildings, Events, UserPrefs], // не забыть добавить
   daos: [TasksDao],
 )
 class AppDatabase extends _$AppDatabase {
+
   AppDatabase() : super(driftDatabase(name: 'salamanca_db'));
 
   AppDatabase.forTesting(super.e);

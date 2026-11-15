@@ -1488,12 +1488,12 @@ class CategoriesCompanion extends UpdateCompanion<CategoryRow> {
   }
 }
 
-class $AppSettingsTable extends AppSettings
-    with TableInfo<$AppSettingsTable, AppSetting> {
+class $UserPrefsTable extends UserPrefs
+    with TableInfo<$UserPrefsTable, UserPref> {
   @override
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
-  $AppSettingsTable(this.attachedDatabase, [this._alias]);
+  $UserPrefsTable(this.attachedDatabase, [this._alias]);
   static const VerificationMeta _settingKeyMeta = const VerificationMeta(
     'settingKey',
   );
@@ -1522,10 +1522,10 @@ class $AppSettingsTable extends AppSettings
   String get aliasedName => _alias ?? actualTableName;
   @override
   String get actualTableName => $name;
-  static const String $name = 'app_settings';
+  static const String $name = 'user_prefs';
   @override
   VerificationContext validateIntegrity(
-    Insertable<AppSetting> instance, {
+    Insertable<UserPref> instance, {
     bool isInserting = false,
   }) {
     final context = VerificationContext();
@@ -1555,9 +1555,9 @@ class $AppSettingsTable extends AppSettings
   @override
   Set<GeneratedColumn> get $primaryKey => {settingKey};
   @override
-  AppSetting map(Map<String, dynamic> data, {String? tablePrefix}) {
+  UserPref map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return AppSetting(
+    return UserPref(
       settingKey: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}setting_key'],
@@ -1570,15 +1570,15 @@ class $AppSettingsTable extends AppSettings
   }
 
   @override
-  $AppSettingsTable createAlias(String alias) {
-    return $AppSettingsTable(attachedDatabase, alias);
+  $UserPrefsTable createAlias(String alias) {
+    return $UserPrefsTable(attachedDatabase, alias);
   }
 }
 
-class AppSetting extends DataClass implements Insertable<AppSetting> {
+class UserPref extends DataClass implements Insertable<UserPref> {
   final String settingKey;
   final String settingValue;
-  const AppSetting({required this.settingKey, required this.settingValue});
+  const UserPref({required this.settingKey, required this.settingValue});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -1587,19 +1587,19 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
     return map;
   }
 
-  AppSettingsCompanion toCompanion(bool nullToAbsent) {
-    return AppSettingsCompanion(
+  UserPrefsCompanion toCompanion(bool nullToAbsent) {
+    return UserPrefsCompanion(
       settingKey: Value(settingKey),
       settingValue: Value(settingValue),
     );
   }
 
-  factory AppSetting.fromJson(
+  factory UserPref.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
   }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
-    return AppSetting(
+    return UserPref(
       settingKey: serializer.fromJson<String>(json['settingKey']),
       settingValue: serializer.fromJson<String>(json['settingValue']),
     );
@@ -1613,12 +1613,12 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
     };
   }
 
-  AppSetting copyWith({String? settingKey, String? settingValue}) => AppSetting(
+  UserPref copyWith({String? settingKey, String? settingValue}) => UserPref(
     settingKey: settingKey ?? this.settingKey,
     settingValue: settingValue ?? this.settingValue,
   );
-  AppSetting copyWithCompanion(AppSettingsCompanion data) {
-    return AppSetting(
+  UserPref copyWithCompanion(UserPrefsCompanion data) {
+    return UserPref(
       settingKey: data.settingKey.present
           ? data.settingKey.value
           : this.settingKey,
@@ -1630,7 +1630,7 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
 
   @override
   String toString() {
-    return (StringBuffer('AppSetting(')
+    return (StringBuffer('UserPref(')
           ..write('settingKey: $settingKey, ')
           ..write('settingValue: $settingValue')
           ..write(')'))
@@ -1642,27 +1642,27 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      (other is AppSetting &&
+      (other is UserPref &&
           other.settingKey == this.settingKey &&
           other.settingValue == this.settingValue);
 }
 
-class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
+class UserPrefsCompanion extends UpdateCompanion<UserPref> {
   final Value<String> settingKey;
   final Value<String> settingValue;
   final Value<int> rowid;
-  const AppSettingsCompanion({
+  const UserPrefsCompanion({
     this.settingKey = const Value.absent(),
     this.settingValue = const Value.absent(),
     this.rowid = const Value.absent(),
   });
-  AppSettingsCompanion.insert({
+  UserPrefsCompanion.insert({
     required String settingKey,
     required String settingValue,
     this.rowid = const Value.absent(),
   }) : settingKey = Value(settingKey),
        settingValue = Value(settingValue);
-  static Insertable<AppSetting> custom({
+  static Insertable<UserPref> custom({
     Expression<String>? settingKey,
     Expression<String>? settingValue,
     Expression<int>? rowid,
@@ -1674,12 +1674,12 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
     });
   }
 
-  AppSettingsCompanion copyWith({
+  UserPrefsCompanion copyWith({
     Value<String>? settingKey,
     Value<String>? settingValue,
     Value<int>? rowid,
   }) {
-    return AppSettingsCompanion(
+    return UserPrefsCompanion(
       settingKey: settingKey ?? this.settingKey,
       settingValue: settingValue ?? this.settingValue,
       rowid: rowid ?? this.rowid,
@@ -1703,7 +1703,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
 
   @override
   String toString() {
-    return (StringBuffer('AppSettingsCompanion(')
+    return (StringBuffer('UserPrefsCompanion(')
           ..write('settingKey: $settingKey, ')
           ..write('settingValue: $settingValue, ')
           ..write('rowid: $rowid')
@@ -1719,7 +1719,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $BuildingsTable buildings = $BuildingsTable(this);
   late final $EventsTable events = $EventsTable(this);
   late final $CategoriesTable categories = $CategoriesTable(this);
-  late final $AppSettingsTable appSettings = $AppSettingsTable(this);
+  late final $UserPrefsTable userPrefs = $UserPrefsTable(this);
   late final TasksDao tasksDao = TasksDao(this as AppDatabase);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
@@ -1730,7 +1730,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     buildings,
     events,
     categories,
-    appSettings,
+    userPrefs,
   ];
 }
 
@@ -2558,22 +2558,20 @@ typedef $$CategoriesTableProcessedTableManager =
       CategoryRow,
       PrefetchHooks Function()
     >;
-typedef $$AppSettingsTableCreateCompanionBuilder =
-    AppSettingsCompanion Function({
-      required String settingKey,
-      required String settingValue,
-      Value<int> rowid,
-    });
-typedef $$AppSettingsTableUpdateCompanionBuilder =
-    AppSettingsCompanion Function({
-      Value<String> settingKey,
-      Value<String> settingValue,
-      Value<int> rowid,
-    });
+typedef $$UserPrefsTableCreateCompanionBuilder = UserPrefsCompanion Function({
+  required String settingKey,
+  required String settingValue,
+  Value<int> rowid,
+});
+typedef $$UserPrefsTableUpdateCompanionBuilder = UserPrefsCompanion Function({
+  Value<String> settingKey,
+  Value<String> settingValue,
+  Value<int> rowid,
+});
 
-class $$AppSettingsTableFilterComposer
-    extends Composer<_$AppDatabase, $AppSettingsTable> {
-  $$AppSettingsTableFilterComposer({
+class $$UserPrefsTableFilterComposer
+    extends Composer<_$AppDatabase, $UserPrefsTable> {
+  $$UserPrefsTableFilterComposer({
     required super.$db,
     required super.$table,
     super.joinBuilder,
@@ -2591,9 +2589,9 @@ class $$AppSettingsTableFilterComposer
   );
 }
 
-class $$AppSettingsTableOrderingComposer
-    extends Composer<_$AppDatabase, $AppSettingsTable> {
-  $$AppSettingsTableOrderingComposer({
+class $$UserPrefsTableOrderingComposer
+    extends Composer<_$AppDatabase, $UserPrefsTable> {
+  $$UserPrefsTableOrderingComposer({
     required super.$db,
     required super.$table,
     super.joinBuilder,
@@ -2611,9 +2609,9 @@ class $$AppSettingsTableOrderingComposer
   );
 }
 
-class $$AppSettingsTableAnnotationComposer
-    extends Composer<_$AppDatabase, $AppSettingsTable> {
-  $$AppSettingsTableAnnotationComposer({
+class $$UserPrefsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $UserPrefsTable> {
+  $$UserPrefsTableAnnotationComposer({
     required super.$db,
     required super.$table,
     super.joinBuilder,
@@ -2631,41 +2629,38 @@ class $$AppSettingsTableAnnotationComposer
   );
 }
 
-class $$AppSettingsTableTableManager
+class $$UserPrefsTableTableManager
     extends
         RootTableManager<
           _$AppDatabase,
-          $AppSettingsTable,
-          AppSetting,
-          $$AppSettingsTableFilterComposer,
-          $$AppSettingsTableOrderingComposer,
-          $$AppSettingsTableAnnotationComposer,
-          $$AppSettingsTableCreateCompanionBuilder,
-          $$AppSettingsTableUpdateCompanionBuilder,
-          (
-            AppSetting,
-            BaseReferences<_$AppDatabase, $AppSettingsTable, AppSetting>,
-          ),
-          AppSetting,
+          $UserPrefsTable,
+          UserPref,
+          $$UserPrefsTableFilterComposer,
+          $$UserPrefsTableOrderingComposer,
+          $$UserPrefsTableAnnotationComposer,
+          $$UserPrefsTableCreateCompanionBuilder,
+          $$UserPrefsTableUpdateCompanionBuilder,
+          (UserPref, BaseReferences<_$AppDatabase, $UserPrefsTable, UserPref>),
+          UserPref,
           PrefetchHooks Function()
         > {
-  $$AppSettingsTableTableManager(_$AppDatabase db, $AppSettingsTable table)
+  $$UserPrefsTableTableManager(_$AppDatabase db, $UserPrefsTable table)
     : super(
         TableManagerState(
           db: db,
           table: table,
           createFilteringComposer: () =>
-              $$AppSettingsTableFilterComposer($db: db, $table: table),
+              $$UserPrefsTableFilterComposer($db: db, $table: table),
           createOrderingComposer: () =>
-              $$AppSettingsTableOrderingComposer($db: db, $table: table),
+              $$UserPrefsTableOrderingComposer($db: db, $table: table),
           createComputedFieldComposer: () =>
-              $$AppSettingsTableAnnotationComposer($db: db, $table: table),
+              $$UserPrefsTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback:
               ({
                 Value<String> settingKey = const Value.absent(),
                 Value<String> settingValue = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
-              }) => AppSettingsCompanion(
+              }) => UserPrefsCompanion(
                 settingKey: settingKey,
                 settingValue: settingValue,
                 rowid: rowid,
@@ -2675,7 +2670,7 @@ class $$AppSettingsTableTableManager
                 required String settingKey,
                 required String settingValue,
                 Value<int> rowid = const Value.absent(),
-              }) => AppSettingsCompanion.insert(
+              }) => UserPrefsCompanion.insert(
                 settingKey: settingKey,
                 settingValue: settingValue,
                 rowid: rowid,
@@ -2683,8 +2678,8 @@ class $$AppSettingsTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable<$AppSettingsTable, AppSetting>(table),
-                  BaseReferences<_$AppDatabase, $AppSettingsTable, AppSetting>(
+                  e.readTable<$UserPrefsTable, UserPref>(table),
+                  BaseReferences<_$AppDatabase, $UserPrefsTable, UserPref>(
                     db,
                     table,
                     e,
@@ -2697,21 +2692,18 @@ class $$AppSettingsTableTableManager
       );
 }
 
-typedef $$AppSettingsTableProcessedTableManager =
+typedef $$UserPrefsTableProcessedTableManager =
     ProcessedTableManager<
       _$AppDatabase,
-      $AppSettingsTable,
-      AppSetting,
-      $$AppSettingsTableFilterComposer,
-      $$AppSettingsTableOrderingComposer,
-      $$AppSettingsTableAnnotationComposer,
-      $$AppSettingsTableCreateCompanionBuilder,
-      $$AppSettingsTableUpdateCompanionBuilder,
-      (
-        AppSetting,
-        BaseReferences<_$AppDatabase, $AppSettingsTable, AppSetting>,
-      ),
-      AppSetting,
+      $UserPrefsTable,
+      UserPref,
+      $$UserPrefsTableFilterComposer,
+      $$UserPrefsTableOrderingComposer,
+      $$UserPrefsTableAnnotationComposer,
+      $$UserPrefsTableCreateCompanionBuilder,
+      $$UserPrefsTableUpdateCompanionBuilder,
+      (UserPref, BaseReferences<_$AppDatabase, $UserPrefsTable, UserPref>),
+      UserPref,
       PrefetchHooks Function()
     >;
 
@@ -2726,6 +2718,6 @@ class $AppDatabaseManager {
       $$EventsTableTableManager(_db, _db.events);
   $$CategoriesTableTableManager get categories =>
       $$CategoriesTableTableManager(_db, _db.categories);
-  $$AppSettingsTableTableManager get appSettings =>
-      $$AppSettingsTableTableManager(_db, _db.appSettings);
+  $$UserPrefsTableTableManager get userPrefs =>
+      $$UserPrefsTableTableManager(_db, _db.userPrefs);
 }
