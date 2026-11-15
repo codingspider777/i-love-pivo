@@ -6,6 +6,7 @@ import 'package:salamanca/features/calendar/month_screen.dart';
 import 'package:salamanca/features/calendar/week_screen.dart';
 import 'package:salamanca/features/map/map_screen.dart';
 import 'package:salamanca/features/settings/settings_screen.dart';
+import 'package:salamanca/features/tasks/task_details_screen.dart';
 import 'package:salamanca/features/tasks/task_editor_screen.dart';
 
 /// Мягкий переход: fade + лёгкий подъём.
@@ -17,7 +18,7 @@ CustomTransitionPage<void> _page(GoRouterState state, Widget child) {
     reverseTransitionDuration: const Duration(milliseconds: 220),
     transitionsBuilder: (context, animation, secondary, child) {
       final curved =
-      CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
+          CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
       return FadeTransition(
         opacity: curved,
         child: SlideTransition(
@@ -47,10 +48,6 @@ GoRouter createAppRouter({List<RouteBase> extraRoutes = const []}) {
         ),
       ),
       GoRoute(
-        path: '/settings',
-        pageBuilder: (context, state) => _page(state, const SettingsScreen()),
-      ),
-      GoRoute(
         path: '/day/:date',
         pageBuilder: (context, state) {
           final date = dateFromParam(state.pathParameters['date']) ??
@@ -65,11 +62,12 @@ GoRouter createAppRouter({List<RouteBase> extraRoutes = const []}) {
           state,
           TaskEditorScreen(
             initialDate: dateFromParam(state.uri.queryParameters['date']),
+            initialTitle: state.uri.queryParameters['title'],
           ),
         ),
       ),
       GoRoute(
-        path: '/task/:id',
+        path: '/task/:id/edit',
         pageBuilder: (context, state) => _page(
             state, TaskEditorScreen(taskId: state.pathParameters['id'])),
       ),
@@ -79,6 +77,15 @@ GoRouter createAppRouter({List<RouteBase> extraRoutes = const []}) {
           state,
           MapScreen(focusBuildingId: state.uri.queryParameters['building']),
         ),
+      ),
+      GoRoute(
+        path: '/task/:id',
+        pageBuilder: (context, state) => _page(
+            state, TaskDetailsScreen(taskId: state.pathParameters['id']!)),
+      ),
+      GoRoute(
+        path: '/settings',
+        pageBuilder: (context, state) => _page(state, const SettingsScreen()),
       ),
       ...extraRoutes,
     ],

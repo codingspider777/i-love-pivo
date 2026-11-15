@@ -47,7 +47,7 @@ class Categories extends Table {
 }
 
 /// v3: простое key-value хранилище настроек (цвета приоритетов и т.п.).
-class AppSettings extends Table {
+class UserPrefs extends Table {
   TextColumn get settingKey => text()();
   TextColumn get settingValue => text()();
 
@@ -56,7 +56,7 @@ class AppSettings extends Table {
 }
 
 @DriftDatabase(
-  tables: [Tasks, Buildings, Events, Categories, AppSettings],
+  tables: [Tasks, Buildings, Events, Categories, UserPrefs],
   daos: [TasksDao],
 )
 class AppDatabase extends _$AppDatabase {
@@ -80,7 +80,7 @@ class AppDatabase extends _$AppDatabase {
       }
       if (from < 3) {
         await m.createTable(categories);
-        await m.createTable(appSettings);
+        await m.createTable(userPrefs);
         await m.addColumn(tasks, tasks.categoryId);
         await _seedCategories();
       }
@@ -118,13 +118,13 @@ class AppDatabase extends _$AppDatabase {
 
   // --- Настройки ---
   Stream<Map<String, String>> watchSettings() =>
-      select(appSettings).watch().map(
+      select(userPrefs).watch().map(
               (rows) => {for (final r in rows) r.settingKey: r.settingValue});
 
   Future<void> setSetting(String key, String value) =>
-      into(appSettings).insertOnConflictUpdate(
-          AppSettingsCompanion.insert(settingKey: key, settingValue: value));
+      into(userPrefs).insertOnConflictUpdate(
+          UserPrefsCompanion.insert(settingKey: key, settingValue: value));
 
   Future<void> deleteSetting(String key) =>
-      (delete(appSettings)..where((s) => s.settingKey.equals(key))).go();
+      (delete(userPrefs)..where((s) => s.settingKey.equals(key))).go();
 }

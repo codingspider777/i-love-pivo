@@ -50,15 +50,11 @@ class _MonthScreenState extends ConsumerState<MonthScreen> {
             onPressed: () =>
                 context.push('/week?date=${dateToParam(_selectedDay)}'),
           ),
+          IconButton(tooltip: 'Настройки', icon: const Icon(Icons.settings_outlined), onPressed: () => context.push('/settings')),
           IconButton(
             tooltip: 'Карта кампуса',
             icon: const Icon(Icons.map_outlined),
             onPressed: () => context.push('/map'),
-          ),
-          IconButton(
-            tooltip: 'Настройки',
-            icon: const Icon(Icons.tune),
-            onPressed: () => context.push('/settings'),
           ),
           IconButton(
             tooltip: 'Сегодня',
