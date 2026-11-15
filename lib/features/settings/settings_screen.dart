@@ -2,6 +2,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:salamanca/features/settings/category_settings_section.dart';
 import 'package:salamanca/features/settings/settings.dart';
 import 'package:salamanca/main.dart';
 
@@ -106,18 +107,21 @@ class SettingsScreen extends ConsumerWidget {
                 items: [0, 5, 15, 30, 60]
                     .map(
                       (v) => DropdownMenuItem(
-                        value: v,
-                        child: Text(v == 0 ? 'В момент задачи' : 'За $v мин'),
-                      ),
-                    )
+                    value: v,
+                    child: Text(v == 0 ? 'В момент задачи' : 'За $v мин'),
+                  ),
+                )
                     .toList(),
                 onChanged: settings.notifications
                     ? (v) {
-                        if (v != null) settings.update(minutes: v);
-                      }
+                  if (v != null) settings.update(minutes: v);
+                }
                     : null,
               ),
             ),
+            const Divider(),
+            const CategorySettingsSection(),
+            const SizedBox(height: 16),
             const Padding(
               padding: EdgeInsets.all(16),
               child: Text(

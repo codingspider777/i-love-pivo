@@ -6,6 +6,7 @@ import 'package:salamanca/core/router/app_router.dart';
 import 'package:salamanca/core/theme/app_theme.dart';
 import 'package:salamanca/features/settings/settings.dart';
 import 'package:salamanca/features/tasks/providers/tasks_provider.dart';
+import 'package:salamanca/features/widget/widget_service.dart';
 
 import 'core/services/notification_service.dart';
 
@@ -24,6 +25,7 @@ Future<void> main() async {
   } catch (error) {
     debugPrint('Notifications: $error');
   }
+  await WidgetBackground.init(); // ночное обновление Android-виджета
   runApp(
     ProviderScope(
       overrides: [
@@ -82,6 +84,8 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
+    // Любое изменение задач/категорий перерисовывает виджет на рабочем столе.
+    ref.watch(widgetSyncProvider);
     ref.listen(tasksStreamProvider, (_, next) {
       if (next.hasValue) _refreshReminders();
     });

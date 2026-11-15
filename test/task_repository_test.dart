@@ -28,6 +28,7 @@ void main() {
       final fakeTasks = [
         TaskRow(
           id: 1,
+          categoryId: 1,
           title: 'Тестовая задача',
           dueTime: DateTime.now(),
           isCompleted: false,
