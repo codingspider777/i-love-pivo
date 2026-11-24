@@ -19,6 +19,10 @@ const Rect kMapContent = Rect.fromLTWH(0, 0, kMapSize, kMapSize);
 
 const double kTopInset = 52;
 
+// ---------------------------------------------------------------------------
+// Разбор SVG
+// ---------------------------------------------------------------------------
+
 final buildingShapesProvider = FutureProvider<Map<String, Path>>((ref) async {
   try {
     final raw =
@@ -29,10 +33,8 @@ final buildingShapesProvider = FutureProvider<Map<String, Path>>((ref) async {
   }
 });
 
-Map<String, Path> _parseShapes(String raw) {
-  final doc = XmlDocument.parse(raw);
-  final svg = doc.rootElement;
-
+/// Матрица «координаты SVG -> координаты карты 1500×1500».
+Matrix4 _viewMatrix(XmlElement svg) {
   double vx = 0, vy = 0, vw = kMapSize, vh = kMapSize;
   final vb = (svg.getAttribute('viewBox') ?? '')
       .trim()
@@ -46,10 +48,16 @@ Map<String, Path> _parseShapes(String raw) {
     vh = vb[3]!;
   }
   final k = math.min(kMapSize / vw, kMapSize / vh);
-  
-  final m = Matrix4.translationValues((kMapSize - vw * k) / 2, (kMapSize - vh * k) / 2, 0)
+
+  return Matrix4.translationValues(
+          (kMapSize - vw * k) / 2, (kMapSize - vh * k) / 2, 0)
       .multiplied(Matrix4.diagonal3Values(k, k, 1.0))
       .multiplied(Matrix4.translationValues(-vx, -vy, 0));
+}
+
+Map<String, Path> _parseShapes(String raw) {
+  final doc = XmlDocument.parse(raw);
+  final m = _viewMatrix(doc.rootElement);
 
   final result = <String, Path>{};
   for (final e in doc.descendants.whereType<XmlElement>()) {
@@ -108,6 +116,101 @@ Path? _shapePath(XmlElement e) {
   return null;
 }
 
+// ---------------------------------------------------------------------------
+// Здания в 3D: основание + приподнятая крыша
+// ---------------------------------------------------------------------------
+
+/// Здание из SVG: основание и высота (атрибут data-h).
+class BuildingShape {
+  const BuildingShape(this.id, this.base, this.height);
+
+  final String id;
+  final Path base;
+  final double height;
+
+  /// На сколько крыша приподнята над основанием (как в SVG).
+  Offset get lift => Offset(-0.35 * height, -height);
+}
+
+final svgBuildingsProvider = FutureProvider<List<BuildingShape>>((ref) async {
+  try {
+    final raw =
+        await rootBundle.loadString('assets/images/main_map_light.svg');
+    return _parseBuildingShapes(raw);
+  } catch (_) {
+    return const [];
+  }
+});
+
+List<BuildingShape> _parseBuildingShapes(String raw) {
+  final doc = XmlDocument.parse(raw);
+  final m = _viewMatrix(doc.rootElement);
+  final result = <BuildingShape>[];
+  for (final e in doc.descendants.whereType<XmlElement>()) {
+    final id = e.getAttribute('id') ?? '';
+    final h = double.tryParse(e.getAttribute('data-h') ?? '');
+    if (h == null) continue;
+    if (!id.startsWith('building_') && !id.startsWith('link_')) continue;
+    final p = _elementPath(e);
+    if (p != null) result.add(BuildingShape(id, p.transform(m.storage), h));
+  }
+  return result;
+}
+
+/// Основание + крыша + «заметённый» объём (для касаний и подсветки стен).
+class _Lifted {
+  _Lifted(this.base, this.lift)
+      : roof = base.shift(lift),
+        hit = _sweep(base, lift);
+
+  final Path base;
+  final Offset lift;
+  final Path roof;
+  final Path hit;
+
+  Offset get anchor => roof.getBounds().center;
+}
+
+Path _sweep(Path base, Offset lift) {
+  var result = base;
+  for (var i = 1; i <= 4; i++) {
+    result = Path.combine(
+        PathOperation.union, result, base.shift(lift * (i / 4)));
+  }
+  return result;
+}
+
+/// Сопоставляет здание из JSON со зданием в SVG по положению и размеру.
+Map<String, _Lifted> _matchBuildings(
+    List<MapBuilding> all, List<BuildingShape> svg) {
+  final result = <String, _Lifted>{};
+  for (final b in all) {
+    BuildingShape? best;
+    var bestScore = double.infinity;
+    for (final s in svg) {
+      final r = s.base.getBounds();
+      final score = (r.center - b.center).distance +
+          (r.width - b.width).abs() +
+          (r.height - b.height).abs();
+      if (score < bestScore) {
+        bestScore = score;
+        best = s;
+      }
+    }
+    if (best == null || bestScore > 150) continue; // не нашли — старое поведение
+    final poly = b.polygon;
+    final base = (poly != null && poly.isNotEmpty)
+        ? (Path()..addPolygon(poly, true))
+        : best.base;
+    result[b.id] = _Lifted(base, best.lift);
+  }
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// Экран
+// ---------------------------------------------------------------------------
+
 class MapScreen extends ConsumerStatefulWidget {
   const MapScreen({super.key, this.focusBuildingId});
 
@@ -128,6 +231,11 @@ class _MapScreenState extends ConsumerState<MapScreen>
   String? _selectedId;
   Map<String, Path> _shapes = const {};
   bool _isInitialized = false;
+
+  // Сопоставление «здание из JSON -> здание в SVG с высотой».
+  Map<String, _Lifted> _matched = const {};
+  List<MapBuilding>? _matchedFor;
+  int _matchedSvg = -1;
 
   double _startScale = 1;
   Offset _startScene = Offset.zero;
@@ -152,6 +260,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
   }
 
   double get _scale => _controller.value.storage[0];
+
+  /// Точка здания для маркера и фокуса: центр крыши (если здание найдено в SVG).
+  Offset _anchor(MapBuilding b) => _matched[b.id]?.anchor ?? b.center;
 
   Matrix4 _clampMatrix(Matrix4 m) {
     if (_viewport == Size.zero) return m;
@@ -182,9 +293,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
 
   Matrix4 _anchored(double scale, Offset scene, Offset screen) {
     final t = screen - scene * scale;
-    return _clampMatrix(
-        Matrix4.translationValues(t.dx, t.dy, 0)
-            .multiplied(Matrix4.diagonal3Values(scale, scale, 1.0)));
+    return _clampMatrix(Matrix4.translationValues(t.dx, t.dy, 0)
+        .multiplied(Matrix4.diagonal3Values(scale, scale, 1.0)));
   }
 
   Matrix4 _fitMatrix() =>
@@ -220,9 +330,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
     _anim.forward(from: 0);
   }
 
-  // ИСПРАВЛЕНО: Динамический расчет масштаба в зависимости от размера здания
+  // Динамический расчёт масштаба в зависимости от размера здания
   void _focusBuilding(MapBuilding b, {bool animate = true}) {
-    final rect = b.rect;
+    final rect = _matched[b.id]?.roof.getBounds() ?? b.rect;
     final visibleHeight = _viewport.height - kTopInset;
 
     // Желаемые размеры здания на экране: 60% ширины экрана и 35% видимой высоты
@@ -239,7 +349,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
     // Ограничиваем итоговый зум: не слишком близко (1.8), не слишком далеко (4.0)
     final s = dynamicScale.clamp(1.8, 4.0).toDouble();
 
-    final target = _focusMatrix(b.center, s);
+    final target = _focusMatrix(_anchor(b), s);
     if (animate) {
       _animateTo(target);
     } else {
@@ -276,13 +386,12 @@ class _MapScreenState extends ConsumerState<MapScreen>
     final v = d.velocity.pixelsPerSecond;
     if (d.pointerCount == 0 && v.distance > 200) {
       final t = _controller.value.getTranslation();
-      
+
       final target = _clampMatrix(
-        Matrix4.translationValues(
-                t.x + v.dx * 0.25, t.y + v.dy * 0.25, 0)
+        Matrix4.translationValues(t.x + v.dx * 0.25, t.y + v.dy * 0.25, 0)
             .multiplied(Matrix4.diagonal3Values(s, s, 1.0)),
       );
-      
+
       _animateTo(target,
           duration: const Duration(milliseconds: 550),
           curve: Curves.decelerate);
@@ -307,8 +416,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
     return _shapes[b.id];
   }
 
+  /// Контур подсветки: крыша (если здание найдено в SVG), иначе прежняя логика.
   Path _highlightShape(MapBuilding b) =>
-      _exactShape(b) ?? (Path()..addRect(b.rect));
+      _matched[b.id]?.roof ?? _exactShape(b) ?? (Path()..addRect(b.rect));
 
   MapBuilding? _hitTest(List<MapBuilding> buildings, Offset scenePoint) {
     MapBuilding? best;
@@ -316,16 +426,25 @@ class _MapScreenState extends ConsumerState<MapScreen>
 
     for (final b in buildings) {
       bool isHit;
-      final exact = _exactShape(b);
-      if (exact != null) {
-        isHit = exact.contains(scenePoint);
+      Offset center = b.center;
+
+      final lifted = _matched[b.id];
+      if (lifted != null) {
+        // Объём здания целиком: основание + крыша + стены между ними.
+        isHit = lifted.hit.contains(scenePoint);
+        center = lifted.anchor;
       } else {
-        final slop = kHitSlop / (_scale == 0 ? 1.0 : _scale);
-        isHit = b.rect.inflate(slop).contains(scenePoint);
+        final exact = _exactShape(b);
+        if (exact != null) {
+          isHit = exact.contains(scenePoint);
+        } else {
+          final slop = kHitSlop / (_scale == 0 ? 1.0 : _scale);
+          isHit = b.rect.inflate(slop).contains(scenePoint);
+        }
       }
 
       if (isHit) {
-        final d = (b.center - scenePoint).distanceSquared;
+        final d = (center - scenePoint).distanceSquared;
         if (d < bestDist) {
           bestDist = d;
           best = b;
@@ -340,7 +459,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
     var bestDist = 24.0;
 
     for (final b in buildings) {
-      final markerScreenPos = MatrixUtils.transformPoint(_controller.value, b.center);
+      final markerScreenPos =
+          MatrixUtils.transformPoint(_controller.value, _anchor(b));
       final dist = (markerScreenPos - viewportPoint).distance;
       if (dist < bestDist) {
         bestDist = dist;
@@ -392,6 +512,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
     final scheme = Theme.of(context).colorScheme;
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     _shapes = ref.watch(buildingShapesProvider).value ?? const {};
+    final svgBuildings = ref.watch(svgBuildingsProvider).value ?? const [];
 
     return Scaffold(
       appBar: AppBar(title: const Text('Карта кампуса')),
@@ -399,6 +520,14 @@ class _MapScreenState extends ConsumerState<MapScreen>
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Не удалось загрузить карту: $e')),
         data: (all) {
+          // Пересчитываем сопоставление только при смене данных.
+          if (!identical(_matchedFor, all) ||
+              _matchedSvg != svgBuildings.length) {
+            _matchedFor = all;
+            _matchedSvg = svgBuildings.length;
+            _matched = _matchBuildings(all, svgBuildings);
+          }
+
           final buildings = _filters.isEmpty
               ? all
               : [for (final b in all) if (_filters.contains(b.category)) b];
@@ -440,74 +569,73 @@ class _MapScreenState extends ConsumerState<MapScreen>
               return Stack(
                 children: [
                   GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onScaleStart: _onScaleStart,
-                      onScaleUpdate: _onScaleUpdate,
-                      onScaleEnd: _onScaleEnd,
-                      onTapUp: (d) => _handleTap(buildings, d.localPosition),
-                      onDoubleTapDown: (d) => _doubleTapPos = d.localPosition,
-                      onDoubleTap: _onDoubleTap,
-                      child: ClipRect(
-                        child: SizedBox.expand(
-                          child: Stack(
-                            children: [
-                              Positioned(
-                                left: 0,
-                                top: 0,
-                                width: kMapSize,
-                                height: kMapSize,
-                                child: ValueListenableBuilder<Matrix4>(
-                                  valueListenable: _controller,
-                                  builder: (context, matrix, child) =>
-                                      Transform(
-                                    transform: matrix,
-                                    alignment: Alignment.topLeft,
-                                    child: child,
-                                  ),
-                                  child: SizedBox(
-                                    width: kMapSize,
-                                    height: kMapSize,
-                                    child: Stack(
-                                      children: [
-                                        ColoredBox(
-                                          color: isDarkMode
-                                              ? const Color(0xFF0B132B)
-                                              : const Color(0xFFF8FAFC),
-                                          child: SvgPicture.asset(
-                                            isDarkMode
-                                                ? 'assets/images/main_map_dark.svg'
-                                                : 'assets/images/main_map_light.svg',
-                                            width: kMapSize,
-                                            height: kMapSize,
-                                            fit: BoxFit.contain,
-                                          ),
+                    behavior: HitTestBehavior.opaque,
+                    onScaleStart: _onScaleStart,
+                    onScaleUpdate: _onScaleUpdate,
+                    onScaleEnd: _onScaleEnd,
+                    onTapUp: (d) => _handleTap(buildings, d.localPosition),
+                    onDoubleTapDown: (d) => _doubleTapPos = d.localPosition,
+                    onDoubleTap: _onDoubleTap,
+                    child: ClipRect(
+                      child: SizedBox.expand(
+                        child: Stack(
+                          children: [
+                            Positioned(
+                              left: 0,
+                              top: 0,
+                              width: kMapSize,
+                              height: kMapSize,
+                              child: ValueListenableBuilder<Matrix4>(
+                                valueListenable: _controller,
+                                builder: (context, matrix, child) => Transform(
+                                  transform: matrix,
+                                  alignment: Alignment.topLeft,
+                                  child: child,
+                                ),
+                                child: SizedBox(
+                                  width: kMapSize,
+                                  height: kMapSize,
+                                  child: Stack(
+                                    children: [
+                                      ColoredBox(
+                                        color: isDarkMode
+                                            ? const Color(0xFF0B132B)
+                                            : const Color(0xFFF8FAFC),
+                                        child: SvgPicture.asset(
+                                          isDarkMode
+                                              ? 'assets/images/main_map_dark.svg'
+                                              : 'assets/images/main_map_light.svg',
+                                          width: kMapSize,
+                                          height: kMapSize,
+                                          fit: BoxFit.contain,
                                         ),
-                                        for (final b in buildings)
-                                          if (b.id == _selectedId)
-                                            Positioned.fill(
-                                              child: IgnorePointer(
-                                                child: CustomPaint(
-                                                  painter: _ShapeHighlightPainter(
-                                                    path: _highlightShape(b),
-                                                    fill: scheme.secondary
-                                                        .withValues(
-                                                            alpha: 0.35),
-                                                    stroke: scheme.secondary,
-                                                  ),
+                                      ),
+                                      for (final b in buildings)
+                                        if (b.id == _selectedId)
+                                          Positioned.fill(
+                                            child: IgnorePointer(
+                                              child: CustomPaint(
+                                                painter:
+                                                    _ShapeHighlightPainter(
+                                                  path: _highlightShape(b),
+                                                  sweep: _matched[b.id]?.hit,
+                                                  fill: scheme.secondary
+                                                      .withValues(alpha: 0.35),
+                                                  stroke: scheme.secondary,
                                                 ),
                                               ),
                                             ),
-                                      ],
-                                    ),
+                                          ),
+                                    ],
                                   ),
                                 ),
                               ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
                       ),
+                    ),
                   ),
-                  
                   IgnorePointer(
                     child: ValueListenableBuilder<Matrix4>(
                       valueListenable: _controller,
@@ -566,7 +694,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
     required bool isDarkMode,
     required ColorScheme scheme,
   }) {
-    final screenPos = MatrixUtils.transformPoint(matrix, b.center);
+    final screenPos = MatrixUtils.transformPoint(matrix, _anchor(b));
 
     if (screenPos.dx < -200 ||
         screenPos.dx > _viewport.width + 200 ||
@@ -622,8 +750,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
                 child: Align(
                   alignment: Alignment.topCenter,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 4, vertical: 2),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                     decoration: BoxDecoration(
                       color: isDarkMode
                           ? Colors.black.withValues(alpha: 0.65)
@@ -691,18 +819,26 @@ class _CategoryFilterBar extends StatelessWidget {
   }
 }
 
+/// Подсветка выбранного здания: тонированный объём (стены) и крыша.
 class _ShapeHighlightPainter extends CustomPainter {
   _ShapeHighlightPainter({
     required this.path,
     required this.fill,
     required this.stroke,
+    this.sweep,
   });
+
   final Path path;
+  final Path? sweep;
   final Color fill;
   final Color stroke;
 
   @override
   void paint(Canvas canvas, Size size) {
+    final s = sweep;
+    if (s != null) {
+      canvas.drawPath(s, Paint()..color = fill.withValues(alpha: 0.16));
+    }
     canvas.drawPath(
       path,
       Paint()
@@ -721,5 +857,8 @@ class _ShapeHighlightPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _ShapeHighlightPainter old) =>
-      old.fill != fill || old.stroke != stroke || old.path != path;
+      old.fill != fill ||
+      old.stroke != stroke ||
+      old.path != path ||
+      old.sweep != sweep;
 }
